@@ -3,6 +3,9 @@ import {
   getHistory,
   saveSession,
   deleteSession,
+  getRemoteHistory,
+  createRemoteSession,
+  deleteRemoteSession,
   generateSessionId,
   groupHistoryByDate,
 } from '../../services/storage'
@@ -15,13 +18,23 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
   const creatingRef               = useRef(false) // guard against double-fire
 
   useEffect(() => {
-    setHistory(getHistory())
+    let mounted = true
+    getRemoteHistory().then(data => {
+      if (mounted) setHistory(data)
+    }).catch(() => {
+      if (mounted) setHistory(getHistory())
+    })
+    return () => { mounted = false }
   }, [])
 
   useEffect(() => {
-    function onStorage() { setHistory(getHistory()) }
-    window.addEventListener('graspd:history', onStorage)
-    return () => window.removeEventListener('graspd:history', onStorage)
+    async function refreshHistory() {
+      const remote = await getRemoteHistory()
+      setHistory(remote)
+    }
+
+    window.addEventListener('graspd:history', refreshHistory)
+    return () => window.removeEventListener('graspd:history', refreshHistory)
   }, [])
 
   // Tell Canvas.jsx about collapsed state so it can shift the canvas area
@@ -29,7 +42,7 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
     onCollapse?.(collapsed)
   }, [collapsed])
 
-  function handleNewCanvas() {
+  async function handleNewCanvas() {
     if (!editor || creatingRef.current) return
     creatingRef.current = true
 
@@ -52,7 +65,8 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
       }
 
       saveSession(session)
-      setHistory(getHistory())
+      createRemoteSession(session.id)
+      setHistory(await getRemoteHistory())
       onSessionChange(session)
     } finally {
       // Release guard after a tick so StrictMode double-fire is ignored
@@ -80,7 +94,7 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
     onSessionChange(session)
   }
 
-  function handleDelete(id) {
+  async function handleDelete(id) {
     if (!editor) return
 
     const session = getHistory().find(h => h.id === id)
@@ -103,7 +117,8 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
     }
 
     deleteSession(id)
-    setHistory(getHistory())
+    await deleteRemoteSession(id)
+    setHistory(await getRemoteHistory())
   }
 
   const groups       = groupHistoryByDate(history)

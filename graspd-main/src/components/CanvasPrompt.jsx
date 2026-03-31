@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { generateKnowledgeGraph } from '../services/gemini'
 import { layoutGraph } from '../utils/graphLayout'
 import { paintGraph } from '../utils/paintGraph'
+import { saveSession, createRemoteSession, generateSessionId } from '../services/storage'
 
 import styles from './CanvasPrompt.module.css'
 
@@ -27,6 +28,7 @@ export default function CanvasPrompt({ editor, onOpenChat }) {
         createdAt: new Date().toISOString(),
       }
       saveSession(session)
+      await createRemoteSession(session.id)
 
       // Tell history panel to refresh
       window.dispatchEvent(new Event('graspd:history'))

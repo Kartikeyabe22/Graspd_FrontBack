@@ -29,6 +29,8 @@ export function deleteChatHistory(pageId) {
   } catch {}
 }
 
+const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 // Session management functions
 export function getHistory() {
   try {
@@ -50,6 +52,73 @@ export function saveSession(session) {
     }
     localStorage.setItem(SESSION_KEY, JSON.stringify(history))
   } catch {}
+}
+
+export async function fetchRemoteSessions() {
+  try {
+    const response = await fetch(`${BACKEND_BASE_URL}/sessions`)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch sessions: ${response.status}`)
+    }
+    const sessionNames = await response.json()
+    return Array.isArray(sessionNames) ? sessionNames : []
+  } catch (error) {
+    console.warn('fetchRemoteSessions failed', error)
+    return []
+  }
+}
+
+export async function createRemoteSession(sessionId) {
+  try {
+    const response = await fetch(`${BACKEND_BASE_URL}/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    })
+    if (!response.ok) {
+      const errText = await response.text()
+      throw new Error(`Failed to create session: ${response.status} ${errText}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.warn('createRemoteSession failed', error)
+    return null
+  }
+}
+
+export async function deleteRemoteSession(sessionId) {
+  try {
+    const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const errText = await response.text()
+      throw new Error(`Failed to delete session: ${response.status} ${errText}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.warn('deleteRemoteSession failed', error)
+    return null
+  }
+}
+
+export async function getRemoteHistory() {
+  const localHistory = getHistory()
+  const remoteIds = await fetchRemoteSessions()
+  const merged = [...localHistory]
+
+  remoteIds.forEach(id => {
+    if (!merged.some(item => item.id === id)) {
+      merged.push({
+        id,
+        topic: id,
+        pageId: null,
+        createdAt: new Date().toISOString(),
+      })
+    }
+  })
+
+  return merged
 }
 
 export function deleteSession(id) {
