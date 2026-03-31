@@ -1,0 +1,33 @@
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 48px;
+  height: 54px;
+  border-bottom: 1px solid var(--b1);
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  background: rgba(8,8,8,0.94);
+  backdrop-filter: blur(16px);
+}
+.logo { font-size: 15px; font-weight: 500; letter-spacing: -.01em; color: var(--t); }
+.links { display: flex; list-style: none; gap: 2px; }
+.links a {
+  font-size: 13px; color: var(--t3); text-decoration: none;
+  padding: 6px 14px; transition: color .15s; letter-spacing: -.01em;
+}
+.links a:hover { color: var(--t); }
+.right { display: flex; gap: 8px; align-items: center; }
+.ghost {
+  font-size: 13px; color: var(--t3); background: transparent;
+  border: 1px solid var(--b2); padding: 7px 16px; border-radius: 8px;
+  cursor: pointer; font-family: var(--f); transition: all .2s;
+}
+.ghost:hover { color: var(--t); border-color: var(--b3); }
+.solid {
+  font-size: 13px; font-weight: 500; background: var(--t); color: var(--bg);
+  border: none; padding: 8px 20px; border-radius: 8px; cursor: pointer;
+  font-family: var(--f); transition: background .15s;
+}
+.solid:hover { background: #d0d0d0; }

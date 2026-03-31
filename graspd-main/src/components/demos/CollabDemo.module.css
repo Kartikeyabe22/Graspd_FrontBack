@@ -1,0 +1,61 @@
+.canvas {
+  position: relative; height: 360px;
+  background: var(--s1); overflow: hidden;
+}
+
+/* shapes */
+.shape { position: absolute; }
+.r1 {
+  top: 44px; left: 32px; width: 128px; height: 80px;
+  background: rgba(96,165,250,.06); border: 1.5px solid rgba(96,165,250,.32);
+  border-radius: 3px; animation: popIn .38s .3s ease both;
+}
+.r2 {
+  top: 44px; right: 36px; width: 100px; height: 100px;
+  background: rgba(74,222,128,.06); border: 1.5px solid rgba(74,222,128,.32);
+  border-radius: 50%; animation: popIn .38s .7s ease both;
+}
+
+/* comment cards */
+.card {
+  position: absolute; background: var(--s3);
+  border: 1px solid var(--b2); border-radius: 10px;
+  padding: 12px 14px; z-index: 8;
+  box-shadow: 0 6px 24px rgba(0,0,0,.55);
+}
+.cname { font-size: 11px; font-weight: 600; margin-bottom: 3px; }
+.cmsg  { font-size: 12px; color: #777; line-height: 1.5; margin-bottom: 4px; }
+.ctime { font-size: 10px; color: #444; }
+.c1 { top: 170px; left: 14px; width: 196px; animation: cmIn .38s .9s ease both; }
+.c2 { top: 20px; left: 180px; width: 176px; animation: cmIn .38s 1.5s ease both; }
+.c3 { top: 220px; right: 16px; width: 174px; animation: cmIn .38s 2.1s ease both; }
+
+/* cursors */
+.cur { position: absolute; display: flex; align-items: flex-start; gap: 3px; pointer-events: none; z-index: 11; font-size: 12px; }
+.cl { font-size: 9px; font-weight: 600; padding: 2px 5px; border-radius: 3px; color: #fff; }
+.cA { animation: d2A 7s .2s ease-in-out infinite both; }
+.cB { animation: d2B 8s .9s ease-in-out infinite both; }
+.cM { animation: d2M 6s 1.6s ease-in-out infinite both; }
+@keyframes d2A { 0%{top:286px;left:28px} 20%{top:250px;left:58px} 40%{top:208px;left:36px} 60%{top:166px;left:68px} 80%{top:234px;left:24px} 100%{top:286px;left:28px} }
+@keyframes d2B { 0%{top:38px;right:30px} 25%{top:78px;right:68px} 50%{top:122px;right:40px} 75%{top:72px;right:22px} 100%{top:38px;right:30px} }
+@keyframes d2M { 0%{top:296px;left:200px} 30%{top:268px;left:248px} 60%{top:288px;left:170px} 100%{top:296px;left:200px} }
+
+/* pins */
+.pin {
+  position: absolute; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: #fff; z-index: 9;
+}
+.p1 { bottom: 72px; left: 52px;  background: #e74c3c; animation: pinPulse 2.4s 0.0s ease-in-out infinite; }
+.p2 { bottom: 72px; right: 58px; background: #3b82f6; animation: pinPulse 2.4s 0.8s ease-in-out infinite; }
+.p3 { bottom: 72px; left: 50%; margin-left: -13px; background: #10b981; animation: pinPulse 2.4s 1.6s ease-in-out infinite; }
+
+/* presence bar */
+.bar {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 36px;
+  background: var(--s2); border-top: 1px solid var(--b1);
+  display: flex; align-items: center; gap: 5px; padding: 0 14px;
+  animation: fi .32s 2.8s ease both; opacity: 0;
+}
+.av { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 700; color: #fff; }
+.lbl { font-size: 10px; color: #444; margin-left: 4px; }

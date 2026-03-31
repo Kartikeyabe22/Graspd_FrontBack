@@ -1,0 +1,82 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #080808;
+  --s1: #0f0f0f; --s2: #141414; --s3: #1a1a1a; --s4: #1f1f1f;
+  --b1: #1c1c1c; --b2: #252525; --b3: #333; --b4: #404040;
+  --t: #ebebeb; --t2: #aaa; --t3: #666; --t4: #3a3a3a;
+  --green: #4ade80; --green2: #22c55e; --green3: #166534;
+  --blue: #60a5fa; --blue2: #3b82f6;
+  --red: #f87171; --yellow: #fbbf24;
+  --f: 'Inter', sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--t);
+  font-family: var(--f);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── Shared Reveal Animations ── */
+.reveal        { opacity: 0; transform: translateY(20px);  transition: opacity .65s ease, transform .65s ease; }
+.reveal-l      { opacity: 0; transform: translateX(-20px); transition: opacity .65s ease, transform .65s ease; }
+.reveal-r      { opacity: 0; transform: translateX(20px);  transition: opacity .65s ease, transform .65s ease; }
+.reveal.on,
+.reveal-l.on,
+.reveal-r.on   { opacity: 1; transform: translate(0); }
+
+/* ── Shared Canvas Grid Background ── */
+.canvas-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ── Shared Demo Box ── */
+.demo-box {
+  background: var(--s1);
+  border: 1px solid var(--b2);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,.7);
+}
+.dbar {
+  background: var(--s2);
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--b1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ddot { width: 8px; height: 8px; border-radius: 50%; }
+.dd1 { background: #ff5f57; }
+.dd2 { background: #febc2e; }
+.dd3 { background: #28c840; }
+.dlabel {
+  font-size: 10px;
+  color: var(--t4);
+  margin-left: 6px;
+  letter-spacing: .05em;
+}
+
+/* ── Section Divider ── */
+.div { height: 1px; background: var(--b1); }
+
+/* ── Keyframes ── */
+@keyframes popIn    { from { opacity:0; transform:scale(.82) } to { opacity:1; transform:scale(1) } }
+@keyframes nIn      { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+@keyframes fi       { from { opacity:0 } to { opacity:1 } }
+@keyframes cmIn     { from { opacity:0; transform:translateY(-6px) } to { opacity:1; transform:translateY(0) } }
+@keyframes tdot     { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-3px)} }
+@keyframes blink    { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes pinPulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.12)} 50%{box-shadow:0 0 0 7px rgba(255,255,255,0)} }
+@keyframes agentPulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(74,222,128,.4)} 50%{opacity:.7;box-shadow:0 0 0 4px rgba(74,222,128,0)} }
+@keyframes wfDance  { 0%,100%{transform:scaleY(.35)} 50%{transform:scaleY(1)} }
+@keyframes nodePulse{ 0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.2)} 50%{box-shadow:0 0 0 6px rgba(74,222,128,0)} }
+@keyframes focusPulse{0%,100%{opacity:.4} 50%{opacity:.9}}
+@keyframes dashFlow { to { stroke-dashoffset: -12 } }
