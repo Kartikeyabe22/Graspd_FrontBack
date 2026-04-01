@@ -1,21 +1,26 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { generateKnowledgeGraph } from '../services/gemini'
 import { layoutGraph } from '../utils/graphLayout'
 import { paintGraph } from '../utils/paintGraph'
-import { saveSession, createRemoteSession, generateSessionId } from '../services/storage'
+import { saveSession, createRemoteSession, uploadDocuments, generateSessionId } from '../services/storage'
 
 import styles from './CanvasPrompt.module.css'
 
-export default function CanvasPrompt({ editor, onOpenChat }) {
-  const [topic, setTopic]   = useState('')
+export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
   const [status, setStatus] = useState('idle')
+  const [uploadStatus, setUploadStatus] = useState('idle')
+  const fileInputRef = useRef(null)
 
   async function handleGenerate() {
-    if (!topic.trim() || !editor || status === 'loading') return
+    if (!editor || status === 'loading') return
     setStatus('loading')
 
     try {
-      const raw  = await generateKnowledgeGraph(topic)
+      // Generate a random topic if none specified
+      const topics = ['quantum mechanics', 'photosynthesis', 'artificial intelligence', 'climate change', 'neural networks']
+      const randomTopic = topics[Math.floor(Math.random() * topics.length)]
+      
+      const raw  = await generateKnowledgeGraph(randomTopic)
       const laid = layoutGraph(raw)
       paintGraph(editor, laid)
 
@@ -24,7 +29,7 @@ export default function CanvasPrompt({ editor, onOpenChat }) {
       const session = {
         id:        generateSessionId(),
         pageId:    currentPage.id,
-        topic:     topic.trim(),
+        topic:     randomTopic,
         createdAt: new Date().toISOString(),
       }
       saveSession(session)
@@ -34,10 +39,9 @@ export default function CanvasPrompt({ editor, onOpenChat }) {
       window.dispatchEvent(new Event('graspd:history'))
 
       // Update page name in tldraw to match topic
-      editor.renamePage(currentPage.id, topic.trim())
+      editor.renamePage(currentPage.id, randomTopic)
 
       setStatus('idle')
-      setTopic('')
     } catch (err) {
       console.error(err)
       setStatus('error')
@@ -45,26 +49,59 @@ export default function CanvasPrompt({ editor, onOpenChat }) {
     }
   }
 
-  function handleKey(e) {
-    if (e.key === 'Enter') handleGenerate()
+  function handleUploadClick() {
+    fileInputRef.current?.click()
+  }
+
+  async function handleFileSelect(e) {
+    const files = e.target.files
+    if (!files || !files.length || !editor) return
+
+    setUploadStatus('loading')
+    try {
+      // Use current session if available, otherwise create a new one
+      let sessionId = activeSessionId
+      
+      if (!sessionId) {
+        // Create a new session only if no session is active
+        const currentPage = editor.getCurrentPage()
+        const currentPageId = currentPage.id
+        const session = {
+          id:        generateSessionId(),
+          pageId:    currentPageId,
+          topic:     'Uploaded Document',
+          createdAt: new Date().toISOString(),
+        }
+        saveSession(session)
+        await createRemoteSession(session.id)
+        sessionId = session.id
+      }
+      
+      // Upload files to the current session
+      const uploadResult = await uploadDocuments(sessionId, Array.from(files))
+      console.log('Upload result:', uploadResult)
+
+      setUploadStatus('idle')
+      // Tell history panel to refresh
+      window.dispatchEvent(new Event('graspd:history'))
+    } catch (err) {
+      console.error(err)
+      setUploadStatus('error')
+      setTimeout(() => setUploadStatus('idle'), 3000)
+    }
+
+    // Reset file input
+    e.target.value = ''
   }
 
   return (
     <div className={styles.wrap}>
       <div className={styles.bar}>
-        <span className={styles.label}>topic</span>
-        <input
-          className={styles.input}
-          value={topic}
-          onChange={e => setTopic(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder="e.g. neural networks, black holes, french revolution…"
-          disabled={status === 'loading'}
-        />
         <button
           className={`${styles.btn} ${status === 'loading' ? styles.loading : ''}`}
           onClick={handleGenerate}
           disabled={status === 'loading'}
+          title="Generate random knowledge graph"
         >
           {status === 'loading' ? (
             <span className={styles.dots}>
@@ -72,6 +109,29 @@ export default function CanvasPrompt({ editor, onOpenChat }) {
             </span>
           ) : status === 'error' ? 'retry' : 'generate ✦'}
         </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.docx"
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+        />
+        
+        <button
+          className={`${styles.btn} ${uploadStatus === 'loading' ? styles.loading : ''}`}
+          onClick={handleUploadClick}
+          disabled={uploadStatus === 'loading'}
+          title="Upload PDF or DOCX files for Q&A"
+        >
+          {uploadStatus === 'loading' ? (
+            <span className={styles.dots}>
+              <span /><span /><span />
+            </span>
+          ) : uploadStatus === 'error' ? 'retry' : 'upload'}
+        </button>
+
         <div className={styles.divider} />
         <button className={styles.tutorBtn} onClick={onOpenChat}>
           <span className={styles.tutorDot} />

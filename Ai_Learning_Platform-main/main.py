@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from database import (
     init_db, get_sessions_from_db, add_session_to_db, delete_session_from_db,
-    add_history_to_db, get_history_from_db, add_file_to_db
+    add_history_to_db, get_history_from_db, add_file_to_db, update_session_name, get_session_name, get_files_from_db
 )
 
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
@@ -67,8 +67,10 @@ def load_vectorstore(session_id: str):
     directory = vectorstore_dir_for_session(session_id)
     if os.path.isdir(directory):
         try:
+            # Try the old method first (for existing vectorstores)
             return Chroma(persist_directory=directory, embedding_function=embeddings)
-        except:
+        except Exception as e:
+            print(f"Error loading vectorstore for {session_id}: {e}")
             return None
     return None
 
@@ -108,6 +110,13 @@ app.add_middleware(
 class SessionCreate(BaseModel):
     session_id: str
 
+class SessionUpdate(BaseModel):
+    name: str
+
+class SessionInfo(BaseModel):
+    session_id: str
+    name: str
+
 class ChatQuery(BaseModel):
     query: str
 
@@ -123,9 +132,13 @@ def startup_event():
         add_session_to_db("default_session")
 
 # -------------------- SESSION APIs --------------------
-@app.get("/sessions", response_model=List[str])
+@app.get("/sessions", response_model=List[SessionInfo])
 def get_sessions():
-    return get_sessions_from_db()
+    sessions = []
+    for session_id in get_sessions_from_db():
+        name = get_session_name(session_id)
+        sessions.append({"session_id": session_id, "name": name})
+    return sessions
 
 @app.post("/sessions")
 def create_session(session: SessionCreate):
@@ -141,6 +154,19 @@ def create_session(session: SessionCreate):
     get_session_history(session_id)
 
     return {"message": "Session created", "session_id": session_id}
+
+@app.put("/sessions/{session_id}")
+def update_session(session_id: str, session: SessionUpdate):
+    if session_id not in get_sessions_from_db():
+        raise HTTPException(404, "Session not found")
+    
+    new_name = session.name.strip()
+    
+    if not new_name:
+        raise HTTPException(400, "Session name cannot be empty")
+    
+    update_session_name(session_id, new_name)
+    return {"message": "Session updated", "session_id": session_id, "name": new_name}
 
 @app.delete("/sessions/{session_id}")
 def delete_session(session_id: str):
@@ -335,3 +361,22 @@ def get_history(session_id: str):
         }
         for r in rows
     ]
+
+# -------------------- DOCUMENTS --------------------
+@app.get("/sessions/{session_id}/documents")
+def get_documents(session_id: str):
+    if session_id not in get_sessions_from_db():
+        raise HTTPException(404, "Session not found")
+
+    rows = get_files_from_db(session_id)
+
+    documents = [
+        {
+            "file_name": r["file_name"],
+            "local_path": r["local_path"],
+            "uploaded_at": r["uploaded_at"]
+        }
+        for r in rows
+    ]
+
+    return {"documents": documents}

@@ -179,3 +179,52 @@ Analyse the uploaded file carefully. Explain what it shows, identify all key con
   const clean = text.replace(/```json|```/g, '').trim()
   return JSON.parse(clean)
 }
+
+// -------------------- BACKEND CHAT (RAG-based) --------------------
+
+// Check if a session has uploaded documents
+export async function checkSessionHasDocuments(sessionId) {
+  try {
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const response = await fetch(`${backendUrl}/sessions/${encodeURIComponent(sessionId)}/documents`, {
+      method: 'GET',
+    })
+    if (!response.ok) return false
+    
+    const data = await response.json()
+    // Check if there are any documents in the response
+    return data.documents && data.documents.length > 0
+  } catch (error) {
+    console.warn('Failed to check session documents:', error)
+    return false
+  }
+}
+
+export async function sendChatMessageToBackend(sessionId, userMessage) {
+  try {
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    console.log(`Sending message to backend for session: ${sessionId}`)
+    
+    const response = await fetch(`${backendUrl}/sessions/${encodeURIComponent(sessionId)}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: userMessage.trim() }),
+    })
+    if (!response.ok) {
+      const errText = await response.text()
+      throw new Error(`Backend chat error: ${response.status} ${errText}`)
+    }
+    const data = await response.json()
+    console.log('Backend response received:', data)
+    
+    return {
+      type: 'explanation',
+      message: data.assistant || data.answer || 'No response',
+      resources: [],
+      graph: null,
+    }
+  } catch (error) {
+    console.error('sendChatMessageToBackend failed:', error)
+    throw error
+  }
+}

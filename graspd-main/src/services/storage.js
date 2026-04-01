@@ -56,14 +56,27 @@ export function saveSession(session) {
 
 export async function fetchRemoteSessions() {
   try {
-    const response = await fetch(`${BACKEND_BASE_URL}/sessions`)
+    const url = `${BACKEND_BASE_URL}/sessions`
+    console.log('Fetching sessions from:', url)
+    const response = await fetch(url)
     if (!response.ok) {
       throw new Error(`Failed to fetch sessions: ${response.status}`)
     }
-    const sessionNames = await response.json()
-    return Array.isArray(sessionNames) ? sessionNames : []
+    const sessions = await response.json()
+    console.log('Remote sessions fetched:', sessions)
+    if (!Array.isArray(sessions)) return []
+    // Support both new format and old fallback format
+    return sessions.map(item => {
+      if (typeof item === 'string') {
+        return { session_id: item, name: item }
+      }
+      return {
+        session_id: item.session_id || item.id || '',
+        name: item.name || item.topic || item.session_id || ''
+      }
+    }).filter(item => item.session_id)
   } catch (error) {
-    console.warn('fetchRemoteSessions failed', error)
+    console.error('fetchRemoteSessions failed:', error)
     return []
   }
 }
@@ -86,6 +99,24 @@ export async function createRemoteSession(sessionId) {
   }
 }
 
+export async function updateRemoteSessionName(sessionId, newName) {
+  try {
+    const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    })
+    if (!response.ok) {
+      const errText = await response.text()
+      throw new Error(`Failed to update session: ${response.status} ${errText}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.warn('updateRemoteSessionName failed', error)
+    throw error
+  }
+}
+
 export async function deleteRemoteSession(sessionId) {
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}`, {
@@ -103,22 +134,14 @@ export async function deleteRemoteSession(sessionId) {
 }
 
 export async function getRemoteHistory() {
-  const localHistory = getHistory()
-  const remoteIds = await fetchRemoteSessions()
-  const merged = [...localHistory]
-
-  remoteIds.forEach(id => {
-    if (!merged.some(item => item.id === id)) {
-      merged.push({
-        id,
-        topic: id,
-        pageId: null,
-        createdAt: new Date().toISOString(),
-      })
-    }
-  })
-
-  return merged
+  const remoteSessions = await fetchRemoteSessions()
+  
+  return remoteSessions.map(({ session_id, name }) => ({
+    id: session_id,
+    topic: name || session_id,
+    pageId: null,
+    createdAt: new Date().toISOString(),
+  }))
 }
 
 export function deleteSession(id) {
@@ -130,6 +153,66 @@ export function deleteSession(id) {
 
 export function generateSessionId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
+}
+
+// -------------------- UPLOAD API --------------------
+export async function uploadDocuments(sessionId, files) {
+  try {
+    const formData = new FormData()
+    files.forEach(file => {
+      formData.append('files', file)
+    })
+
+    const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/upload`, {
+      method: 'POST',
+      body: formData,
+    })
+    if (!response.ok) {
+      const errText = await response.text()
+      throw new Error(`Failed to upload documents: ${response.status} ${errText}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.warn('uploadDocuments failed', error)
+    throw error
+  }
+}
+
+// -------------------- CHAT API --------------------
+export async function sendChatToBackend(sessionId, query) {
+  try {
+    const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: query.trim() }),
+    })
+    if (!response.ok) {
+      const errText = await response.text()
+      throw new Error(`Failed to send chat: ${response.status} ${errText}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.warn('sendChatToBackend failed', error)
+    throw error
+  }
+}
+
+// -------------------- HISTORY API --------------------
+export async function getChatHistoryFromBackend(sessionId) {
+  try {
+    const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/history`, {
+      method: 'GET',
+    })
+    if (!response.ok) {
+      const errText = await response.text()
+      throw new Error(`Failed to fetch chat history: ${response.status} ${errText}`)
+    }
+    const rows = await response.json()
+    return Array.isArray(rows) ? rows : []
+  } catch (error) {
+    console.warn('getChatHistoryFromBackend failed', error)
+    return []
+  }
 }
 
 export function groupHistoryByDate(sessions) {

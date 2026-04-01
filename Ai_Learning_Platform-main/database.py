@@ -16,6 +16,7 @@ def init_db():
     cur = conn.cursor()
     cur.execute("""CREATE TABLE IF NOT EXISTS sessions (
                     session_id TEXT PRIMARY KEY,
+                    name TEXT,
                     created_at TEXT
                     )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS history (
@@ -33,6 +34,14 @@ def init_db():
                     uploaded_at TEXT
                     )""")
     conn.commit()
+    
+    # Migration: Add name column if it doesn't exist
+    try:
+        cur.execute("ALTER TABLE sessions ADD COLUMN name TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
     return conn
 
 def get_sessions_from_db():
@@ -81,3 +90,25 @@ def add_file_to_db(session_id: str, file_name: str, local_path: str):
     cur.execute("INSERT INTO session_files (session_id, file_name, local_path, uploaded_at) VALUES (?, ?, ?, ?)",
                 (session_id, file_name, local_path, datetime.utcnow().isoformat()))
     conn.commit()
+
+def update_session_name(session_id: str, new_name: str):
+    """Update the name of a session."""
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE sessions SET name = ? WHERE session_id = ?", (new_name, session_id))
+    conn.commit()
+
+def get_session_name(session_id: str):
+    """Get the name of a session."""
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sessions WHERE session_id = ?", (session_id,))
+    row = cur.fetchone()
+    return row[0] if row and row[0] else session_id
+
+def get_files_from_db(session_id: str):
+    """Get all files for a session."""
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT file_name, local_path, uploaded_at FROM session_files WHERE session_id = ? ORDER BY uploaded_at", (session_id,))
+    return cur.fetchall()

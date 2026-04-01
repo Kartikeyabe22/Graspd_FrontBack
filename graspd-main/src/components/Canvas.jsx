@@ -38,6 +38,7 @@ export default function Canvas(){
           <CanvasPrompt
             editor={editor}
             onOpenChat={() => setChatOpen(true)}
+            activeSessionId={activeSessionId}
           />
         )}
         {editor && (
@@ -45,6 +46,7 @@ export default function Canvas(){
             editor={editor}
             open={chatOpen}
             onClose={() => setChatOpen(false)}
+            activeSessionId={activeSessionId}
           />
         )}
       </div>

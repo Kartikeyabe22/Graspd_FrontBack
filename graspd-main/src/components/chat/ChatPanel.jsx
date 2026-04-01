@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useEditor } from 'tldraw'
-import { sendChatMessage, sendChatMessageWithFile } from '../../services/gemini'
+import { sendChatMessage, sendChatMessageWithFile, sendChatMessageToBackend, checkSessionHasDocuments } from '../../services/gemini'
 import { layoutGraph } from '../../utils/graphLayout'
 import { paintGraph } from '../../utils/paintGraph'
-import { getChatHistory, saveChatHistory } from '../../services/storage'
+import { getChatHistory, saveChatHistory, getChatHistoryFromBackend } from '../../services/storage'
 import MessageBubble from './MessageBubble'
 import styles from './ChatPanel.module.css'
 
@@ -17,38 +17,65 @@ const DEFAULT_GREETING = {
   },
 }
 
-export default function ChatPanel({ editor, open, onClose }) {
+export default function ChatPanel({ editor, open, onClose, activeSessionId }) {
   const [messages, setMessages]       = useState([DEFAULT_GREETING])
   const [input, setInput]             = useState('')
   const [loading, setLoading]         = useState(false)
   const [pendingFile, setPendingFile] = useState(null)
   const [currentPageId, setCurrentPageId] = useState(null)
+  const [currentSessionId, setCurrentSessionId] = useState(null)
 
   const bottomRef = useRef(null)
   const fileRef   = useRef(null)
 
-  // ── Watch for page changes ──────────────────────────────────────────────
+  // ── Watch for session changes ──────────────────────────────────────────────
+  useEffect(() => {
+    setCurrentSessionId(activeSessionId)
+    
+    // Load chat history from backend if we have a session ID
+    async function loadHistory() {
+      let historyToLoad = [DEFAULT_GREETING]
+      if (activeSessionId) {
+        try {
+          const backendHistory = await getChatHistoryFromBackend(activeSessionId)
+          if (backendHistory && backendHistory.length > 0) {
+            // Convert backend history format to frontend format
+            const convertedHistory = backendHistory.map(entry => ({
+              role: entry.role === 'user' ? 'user' : 'ai',
+              content: entry.content,
+              data: entry.role === 'user' ? null : {
+                type: 'explanation',
+                message: entry.content,
+                resources: [],
+                graph: null,
+              },
+            }))
+            historyToLoad = convertedHistory
+          }
+        } catch (error) {
+          console.warn('Failed to load backend history:', error)
+        }
+      }
+      
+      setMessages(historyToLoad)
+    }
+    
+    loadHistory()
+  }, [activeSessionId])
+
+  // ── Watch for page changes (for canvas-specific features) ──────────────────────────────────────────────
   useEffect(() => {
     if (!editor) return
 
-    function checkPage() {
+    const checkPage = () => {
       const pageId = editor.getCurrentPageId()
       if (pageId === currentPageId) return
 
-      // Save current page's chat before switching
-      if (currentPageId && messages.length > 1) {
-        saveChatHistory(currentPageId, messages)
-      }
-
-      // Load new page's chat
-      const saved = getChatHistory(pageId)
-      setMessages(saved && saved.length > 0 ? saved : [DEFAULT_GREETING])
       setCurrentPageId(pageId)
       setInput('')
       setPendingFile(null)
     }
 
-    // Check immediately
     checkPage()
 
     // Poll for page changes — tldraw fires store events on page switch
@@ -130,9 +157,35 @@ export default function ChatPanel({ editor, open, onClose }) {
         content: m.role === 'user' ? m.content : m.data?.message ?? '',
       }))
 
-      const response = fileToSend
-        ? await sendChatMessageWithFile(userMessage, fileToSend.file, shapes, history)
-        : await sendChatMessage(userMessage, shapes, history)
+      let response
+
+      // If we have a session ID, check if documents are uploaded and use backend RAG chat
+      if (currentSessionId) {
+        try {
+          const hasDocs = await checkSessionHasDocuments(currentSessionId)
+          console.log(`Session ${currentSessionId} has documents: ${hasDocs}`)
+          
+          if (hasDocs) {
+            response = await sendChatMessageToBackend(currentSessionId, userMessage)
+          } else {
+            // No documents, use Gemini
+            response = fileToSend
+              ? await sendChatMessageWithFile(userMessage, fileToSend.file, shapes, history)
+              : await sendChatMessage(userMessage, shapes, history)
+          }
+        } catch (err) {
+          console.error('Error checking documents or backend chat:', err)
+          // Fall back to Gemini
+          response = fileToSend
+            ? await sendChatMessageWithFile(userMessage, fileToSend.file, shapes, history)
+            : await sendChatMessage(userMessage, shapes, history)
+        }
+      } else {
+        // No session ID, use Gemini
+        response = fileToSend
+          ? await sendChatMessageWithFile(userMessage, fileToSend.file, shapes, history)
+          : await sendChatMessage(userMessage, shapes, history)
+      }
 
       if (response.graph) {
         const laid = layoutGraph(response.graph)

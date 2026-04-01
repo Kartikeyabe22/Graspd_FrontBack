@@ -17,7 +17,6 @@
   padding: 8px 12px;
   backdrop-filter: blur(16px);
   box-shadow: 0 8px 40px rgba(0,0,0,0.6);
-  min-width: 480px;
 }
 
 .label {

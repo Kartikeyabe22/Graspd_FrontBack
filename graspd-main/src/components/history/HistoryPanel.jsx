@@ -20,8 +20,10 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
   useEffect(() => {
     let mounted = true
     getRemoteHistory().then(data => {
+      console.log('HistoryPanel: getRemoteHistory returned:', data)
       if (mounted) setHistory(data)
-    }).catch(() => {
+    }).catch((err) => {
+      console.error('HistoryPanel: getRemoteHistory failed:', err)
       if (mounted) setHistory(getHistory())
     })
     return () => { mounted = false }
@@ -121,6 +123,19 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
     setHistory(await getRemoteHistory())
   }
 
+  function handleUpdateSession(sessionId, newName) {
+    setHistory(prevHistory => {
+      const nextHistory = prevHistory.map(s =>
+        s.id === sessionId ? { ...s, topic: newName } : s
+      )
+      const updatedSession = nextHistory.find((s) => s.id === sessionId)
+      if (updatedSession) {
+        saveSession(updatedSession)
+      }
+      return nextHistory
+    })
+  }
+
   const groups       = groupHistoryByDate(history)
   const GROUP_LABELS = {
     today:     'Today',
@@ -166,6 +181,7 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
                         isActive={session.id === activeSessionId}
                         onClick={() => handleSelectSession(session)}
                         onDelete={handleDelete}
+                        onUpdate={handleUpdateSession}
                       />
                     ))}
                   </div>
