@@ -1,5 +1,6 @@
 import os
 import shutil
+import json
 from typing import List
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,6 +55,7 @@ db_conn = init_db()
 # -------------------- MEMORY --------------------
 store = {}
 vectorstores = {}
+teaching_sessions = {}
 
 def get_session_history(session: str) -> BaseChatMessageHistory:
     if session not in store:
@@ -78,6 +80,39 @@ def save_vectorstore(session_id: str, vectorstore_obj):
     if hasattr(vectorstore_obj, "persist"):
         vectorstore_obj.persist()
     vectorstores[session_id] = vectorstore_obj
+
+
+def get_rag_relevant_context(session_id: str, file_path: str, topic: str, k: int = 6):
+    vs = vectorstores.get(session_id) or load_vectorstore(session_id)
+    if vs is None:
+        return ""
+
+    context_docs = []
+    try:
+        # If source filtering is supported, use it
+        context_docs = vs.similarity_search(topic, k=k, filter={"source": file_path})
+    except Exception:
+        try:
+            context_docs = vs.similarity_search(topic, k=k)
+        except Exception:
+            context_docs = []
+
+    context_text = "\n\n".join([doc.page_content for doc in context_docs if getattr(doc, 'page_content', None)])
+    return context_text[:12000]  # bound size for prompt safety
+
+
+def run_professor_prompt(session_id: str, prompt_text: str):
+    chain = get_rag_chain_for_session(session_id)
+    if chain is None:
+        raise HTTPException(400, "Upload documents first")
+
+    response = chain.invoke(
+        {"input": prompt_text},
+        config={"configurable": {"session_id": session_id}}
+    )
+
+    return response.get("answer", "").strip()
+
 
 # -------------------- DOCX LOADER --------------------
 def load_docx_file(file_path):
@@ -269,6 +304,158 @@ async def upload_documents(
         "chunks": len(splits),
         "failed_files": failed_files
     }
+
+
+def _make_teacher_topics(session_id: str, file_name: str, file_path: str):
+    source_context = get_rag_relevant_context(session_id, file_path, f"Main topics for {file_name}", k=8)
+
+    teacher_prompt = f"""You are a professor.
+
+From the document content below (PDF file: {file_name}), extract 4-6 main topics in logical teaching order.
+Keep topics concise and meaningful.
+Return STRICT JSON array only, e.g. [\"Topic 1\", \"Topic 2\"] (no explanation, no markdown, no extras).
+
+Context:
+{source_context}
+"""
+
+    raw = run_professor_prompt(session_id, teacher_prompt)
+
+    try:
+        topics = json.loads(raw)
+        if not isinstance(topics, list) or not all(isinstance(t, str) for t in topics):
+            raise ValueError("Invalid topic response format")
+    except Exception:
+        raise HTTPException(500, f"Failed to parse topics for file {file_name}. raw: {raw[:800]}")
+
+    if len(topics) < 1:
+        raise HTTPException(500, f"No topics extracted for {file_name}")
+
+    return topics
+
+
+def _make_teaching_step(session_id: str):
+    if session_id not in teaching_sessions:
+        raise HTTPException(400, "Teaching session not started")
+
+    state = teaching_sessions[session_id]
+    pdfs = state.get("pdfs", [])
+
+    if not pdfs:
+        raise HTTPException(400, "No PDFs in teaching state")
+
+    idx_pdf = state["current_pdf_index"]
+    idx_topic = state["current_topic_index"]
+
+    if idx_pdf >= len(pdfs):
+        return {"message": "Teaching completed"}
+
+    current_pdf = pdfs[idx_pdf]
+    topics = current_pdf.get("topics", [])
+
+    if idx_topic >= len(topics):
+        return {"message": "Teaching completed"}
+
+    topic = topics[idx_topic]
+    file_path = current_pdf.get("file_path")
+    context_fragment = get_rag_relevant_context(session_id, file_path, topic, k=6)
+
+    teaching_prompt = f"""You are a professor teaching a student step-by-step.
+Topic: {topic}
+
+Instructions:
+- Explain clearly and simply
+- Focus only on this topic
+- Highlight important points for exams
+- Avoid unnecessary details
+
+Use only the provided relevant context.
+
+Context:
+{context_fragment}
+
+Output STRICT JSON ONLY, no markdown:
+{{
+  "canvas": {{
+    "title": "{topic}",
+    "content": "(2-4 lines explanation)",
+    "important_points": ["..."]
+  }},
+  "voice": {{
+    "script": "(more natural, slightly longer explanation)"
+  }}
+}}
+"""
+
+    raw = run_professor_prompt(session_id, teaching_prompt)
+
+    try:
+        structured = json.loads(raw)
+        if not isinstance(structured, dict) or "canvas" not in structured or "voice" not in structured:
+            raise ValueError("Invalid teaching step format")
+    except Exception:
+        raise HTTPException(500, f"Failed to parse teaching step for topic {topic}. raw: {raw[:1200]}")
+
+    return {
+        "step": idx_topic + 1,
+        "pdf_index": idx_pdf,
+        "topic_index": idx_topic,
+        "topic": topic,
+        "canvas": structured.get("canvas"),
+        "voice": structured.get("voice")
+    }
+
+
+@app.post("/sessions/{session_id}/teach/start")
+def start_teaching(session_id: str):
+    if session_id not in get_sessions_from_db():
+        raise HTTPException(404, "Session not found")
+
+    files = get_files_from_db(session_id)
+    if not files:
+        raise HTTPException(400, "No PDFs uploaded for this session")
+
+    teaching_state_pdfs = []
+
+    for file in files:
+        file_name = file["file_name"]
+        file_path = file["local_path"]
+        topics = _make_teacher_topics(session_id, file_name, file_path)
+        teaching_state_pdfs.append({"file_name": file_name, "file_path": file_path, "topics": topics})
+
+    teaching_sessions[session_id] = {
+        "pdfs": teaching_state_pdfs,
+        "current_pdf_index": 0,
+        "current_topic_index": 0
+    }
+
+    return _make_teaching_step(session_id)
+
+
+@app.post("/sessions/{session_id}/teach/next")
+def next_teaching_step(session_id: str):
+    if session_id not in get_sessions_from_db():
+        raise HTTPException(404, "Session not found")
+
+    if session_id not in teaching_sessions:
+        raise HTTPException(400, "Teaching not started")
+
+    state = teaching_sessions[session_id]
+    state["current_topic_index"] += 1
+
+    if state["current_pdf_index"] < len(state["pdfs"]):
+        current_pdf = state["pdfs"][state["current_pdf_index"]]
+        if state["current_topic_index"] >= len(current_pdf.get("topics", [])):
+            state["current_pdf_index"] += 1
+            state["current_topic_index"] = 0
+
+    if state["current_pdf_index"] >= len(state["pdfs"]):
+        return {"message": "Teaching completed"}
+
+    teaching_sessions[session_id] = state
+    return _make_teaching_step(session_id)
+
+
 # -------------------- RAG --------------------
 def get_rag_chain_for_session(session_id: str):
     if not api_key:
