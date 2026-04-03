@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import useTeaching from '../hooks/useTeaching'
 import { generateKnowledgeGraph } from '../services/gemini'
 import { layoutGraph } from '../utils/graphLayout'
 import { paintGraph } from '../utils/paintGraph'
@@ -10,6 +11,15 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
   const [status, setStatus] = useState('idle')
   const [uploadStatus, setUploadStatus] = useState('idle')
   const fileInputRef = useRef(null)
+
+  const {
+    isLoading: teachingLoading,
+    isStreaming,
+    isSpeaking,
+    currentStep,
+    startLearning,
+    nextStep,
+  } = useTeaching(activeSessionId, editor)
 
   async function handleGenerate() {
     if (!editor || status === 'loading') return
@@ -133,11 +143,42 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
         </button>
 
         <div className={styles.divider} />
+
+        <button
+          className={`${styles.btn} ${teachingLoading ? styles.loading : ''}`}
+          onClick={() => startLearning().catch(err => console.error(err))}
+          disabled={!activeSessionId || teachingLoading || isStreaming}
+          title="Start teaching from PDFs"
+        >
+          {(teachingLoading && !currentStep) ? (
+            <span className={styles.dots}><span /><span /><span /></span>
+          ) : 'start learning'}
+        </button>
+
+        <button
+          className={`${styles.btn} ${teachingLoading ? styles.loading : ''}`}
+          onClick={() => nextStep().catch(err => console.error(err))}
+          disabled={!activeSessionId || teachingLoading || isStreaming}
+          title="Next topic step"
+        >
+          {teachingLoading ? (
+            <span className={styles.dots}><span /><span /><span /></span>
+          ) : 'next'}
+        </button>
+
+        <div className={styles.divider} />
         <button className={styles.tutorBtn} onClick={onOpenChat}>
           <span className={styles.tutorDot} />
           ask tutor
         </button>
       </div>
+      {currentStep && (
+        <div className={styles.statusText}>
+          Teaching: {currentStep.topic} (PDF {currentStep.pdf_index + 1}, step {currentStep.step})
+          {isStreaming ? ' — typing...' : ''}
+          {isSpeaking ? ' 🔊 speaking...' : ''}
+        </div>
+      )}
     </div>
   )
 }

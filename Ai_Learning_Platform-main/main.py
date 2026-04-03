@@ -1,11 +1,15 @@
 import os
 import shutil
 import json
-from typing import List
+import uuid
+import docx
+from typing import List, Annotated
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from elevenlabs.client import ElevenLabs
+from fastapi.responses import StreamingResponse
 
 from database import (
     init_db, get_sessions_from_db, add_session_to_db, delete_session_from_db,
@@ -25,19 +29,33 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 
-
-from typing import List, Annotated
-from fastapi import UploadFile, File, HTTPException
-import os
-import uuid
-
-
-import docx
-import uuid
-
 # -------------------- ENV --------------------
 load_dotenv()
 api_key = os.getenv("GROQ_API_KEY")
+elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+
+# -------------------- TTS CLIENT --------------------
+elevenlabs_client = None
+if elevenlabs_api_key:
+    elevenlabs_client = ElevenLabs(api_key=elevenlabs_api_key)
+
+# -------------------- TTS FUNCTION --------------------
+def text_to_speech_stream(text: str):
+    """Convert text to speech and return audio stream"""
+    if not elevenlabs_client:
+        return None
+    
+    try:
+        audio = elevenlabs_client.text_to_speech.convert(
+            text=text,
+            voice_id="oGIr8duUtinux4nPetuO",  # Your voice ID
+            model_id="eleven_v3",
+            output_format="mp3_44100_128",
+        )
+        return audio
+    except Exception as e:
+        print(f"TTS Error: {e}")
+        return None
 
 # -------------------- EMBEDDINGS --------------------
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -154,6 +172,9 @@ class SessionInfo(BaseModel):
 
 class ChatQuery(BaseModel):
     query: str
+
+class TTSRequest(BaseModel):
+    text: str
 
 class MessageHistory(BaseModel):
     role: str
@@ -454,6 +475,24 @@ def next_teaching_step(session_id: str):
 
     teaching_sessions[session_id] = state
     return _make_teaching_step(session_id)
+
+
+# -------------------- TTS API --------------------
+@app.post("/tts")
+async def generate_tts(tts_request: TTSRequest):
+    """Convert text to speech using ElevenLabs"""
+    if not elevenlabs_client:
+        raise HTTPException(500, "TTS service not configured")
+    
+    text = tts_request.text.strip()
+    if not text:
+        raise HTTPException(400, "Text cannot be empty")
+    
+    audio_stream = text_to_speech_stream(text)
+    if audio_stream is None:
+        raise HTTPException(500, "Failed to generate audio")
+    
+    return StreamingResponse(audio_stream, media_type="audio/mpeg")
 
 
 # -------------------- RAG --------------------
