@@ -49,6 +49,22 @@ export default function useTeaching(sessionId, editor) {
     const xStart = 40
     const yStart = yOffset
 
+    // Create white sheet background
+    const sheetShape = editor.createShape({
+      type: 'geo',
+      x: xStart - 20,
+      y: yStart - 20,
+      props: {
+        geo: 'rectangle',
+        w: 800,
+        h: 400,
+        fill: 'solid',
+        color: 'white',
+        size: 's',
+        dash: 'solid',
+      },
+    })
+
     // Title shape (bold)
     const titleText = step.canvas.title || step.topic || 'Untitled Topic'
 
@@ -62,46 +78,67 @@ export default function useTeaching(sessionId, editor) {
         size: 'xl',
         font: 'sans',
         textAlign: 'start',
-        w: 750,
+        w: 720,
         scale: 1,
-        autoSize: true,
+        autoSize: false,
       },
     })
+
+    const content = step.canvas.content || ''
 
     const contentShape = editor.createShape({
       type: 'text',
       x: xStart,
       y: yStart + 100,
       props: {
-        richText: toRichText(''),
+        richText: toRichText(content),
         color: 'black',
         size: 'm',
         font: 'sans',
         textAlign: 'start',
-        w: 750,
+        w: 720,
         scale: 1,
-        autoSize: true,
+        autoSize: false,
       },
     })
 
     setIsStreaming(true)
-    const content = step.canvas.content || ''
 
     try {
-      await streamText(content, partial => {
-        editor.updateShapes([{ id: contentShape.id, type: 'text', props: { richText: toRichText(partial) } }])
-      }, { intervalMs: 28, byWord: false })
+      if (content) {
+        await streamText(content, partial => {
+          editor.updateShapes([{ id: contentShape.id, props: { richText: toRichText(partial) } }])
+        }, { intervalMs: 28, byWord: false })
+      }
 
       await sleep(200)
 
-      // render important points with bullet list
+      // render important points with heading
       const points = step.canvas.important_points || []
       if (points.length > 0) {
+        // Create "Important Points" heading
+        editor.createShape({
+          type: 'text',
+          x: xStart,
+          y: yStart + 170,
+          props: {
+            richText: toRichText('Important Points'),
+            color: 'black',
+            size: 'l',
+            font: 'sans',
+            textAlign: 'start',
+            w: 720,
+            scale: 1,
+            autoSize: false,
+          },
+        })
+
+        // Create bullet list below the heading
         const bullets = points.map(p => `• ${p}`).join('\n')
         editor.createShape({
           type: 'text',
           x: xStart + 10,
-          y: yStart + 170,
+          y: yStart + 200,
           props: {
             richText: toRichText(bullets),
             color: 'black',
@@ -110,7 +147,7 @@ export default function useTeaching(sessionId, editor) {
             textAlign: 'start',
             w: 700,
             scale: 1,
-            autoSize: true,
+            autoSize: false,
           },
         })
       }
@@ -130,7 +167,7 @@ export default function useTeaching(sessionId, editor) {
     }
 
     
-    const newYOffset = yStart + 220 + (points.length ? points.length * 24 : 0)
+    const newYOffset = yStart + 450 + (points.length ? points.length * 24 : 0)
     setYOffset(newYOffset)
 
     // Optional: scroll viewport to include latest shape

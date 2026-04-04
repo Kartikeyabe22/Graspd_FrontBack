@@ -48,7 +48,7 @@ def text_to_speech_stream(text: str):
     try:
         audio = elevenlabs_client.text_to_speech.convert(
             text=text,
-            voice_id="oGIr8duUtinux4nPetuO",  # Your voice ID
+            voice_id="ONwNWTeUTsywCR9UbUPk",  # Your voice ID
             model_id="eleven_v3",
             output_format="mp3_44100_128",
         )
@@ -502,7 +502,7 @@ def get_rag_chain_for_session(session_id: str):
 
     llm = ChatGroq(
         groq_api_key=api_key,
-        model_name="llama-3.3-70b-versatile"
+        model_name="llama-3.1-8b-instant"
     )
 
     vs = vectorstores.get(session_id) or load_vectorstore(session_id)

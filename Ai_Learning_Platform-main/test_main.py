@@ -39,7 +39,7 @@ def text_to_speech_stream(text: str):
     try:
         audio = elevenlabs_client.text_to_speech.convert(
             text=text,
-            voice_id="oGIr8duUtinux4nPetuO",  # Your voice ID
+            voice_id="ONwNWTeUTsywCR9UbUPk",  # Your voice ID
             model_id="eleven_v3",
             output_format="mp3_44100_128",
         )
