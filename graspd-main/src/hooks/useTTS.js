@@ -5,6 +5,7 @@ import { generateSpeech, playSpeech } from '../services/tts'
  * Hook for text-to-speech functionality
  * Provides methods to generate audio and manage playback state
  */
+
 export const useTTS = () => {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)

@@ -100,7 +100,7 @@ def save_vectorstore(session_id: str, vectorstore_obj):
     vectorstores[session_id] = vectorstore_obj
 
 
-def get_rag_relevant_context(session_id: str, file_path: str, topic: str, k: int = 6):
+def get_rag_relevant_context(session_id: str, file_path: str, topic: str, k: int = 1):
     vs = vectorstores.get(session_id) or load_vectorstore(session_id)
     if vs is None:
         return ""
@@ -116,7 +116,7 @@ def get_rag_relevant_context(session_id: str, file_path: str, topic: str, k: int
             context_docs = []
 
     context_text = "\n\n".join([doc.page_content for doc in context_docs if getattr(doc, 'page_content', None)])
-    return context_text[:12000]  # bound size for prompt safety
+    return context_text[:300]  # bound size for prompt safety
 
 
 def run_professor_prompt(session_id: str, prompt_text: str):
@@ -304,8 +304,8 @@ async def upload_documents(
 
     # Split + Embed
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=5000,
-        chunk_overlap=500
+        chunk_size=2000,
+        chunk_overlap=200
     )
     splits = splitter.split_documents(documents)
 
@@ -328,7 +328,7 @@ async def upload_documents(
 
 
 def _make_teacher_topics(session_id: str, file_name: str, file_path: str):
-    source_context = get_rag_relevant_context(session_id, file_path, f"Main topics for {file_name}", k=8)
+    source_context = get_rag_relevant_context(session_id, file_path, f"Main topics for {file_name}", k=1)
 
     teacher_prompt = f"""You are a professor.
 
@@ -379,7 +379,7 @@ def _make_teaching_step(session_id: str):
 
     topic = topics[idx_topic]
     file_path = current_pdf.get("file_path")
-    context_fragment = get_rag_relevant_context(session_id, file_path, topic, k=6)
+    context_fragment = get_rag_relevant_context(session_id, file_path, topic, k=1)
 
     teaching_prompt = f"""You are a professor teaching a student step-by-step.
 Topic: {topic}
@@ -441,7 +441,8 @@ def start_teaching(session_id: str):
     for file in files:
         file_name = file["file_name"]
         file_path = file["local_path"]
-        topics = _make_teacher_topics(session_id, file_name, file_path)
+        topics = ["Overview", "Key Concepts", "Important Details", "Summary"]
+        #topics = _make_teacher_topics(session_id, file_name, file_path)
         teaching_state_pdfs.append({"file_name": file_name, "file_path": file_path, "topics": topics})
 
     teaching_sessions[session_id] = {
