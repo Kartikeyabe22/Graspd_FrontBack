@@ -21,7 +21,6 @@ export async function streamText(fullText, onUpdate, options = {}) {
         resolve()
         return
       }
-
       currentValue += fullText[i]
       onUpdate(currentValue)
       i++
@@ -38,7 +37,6 @@ export default function useTeaching(sessionId, editor) {
   const editorRef = useRef(editor)
   editorRef.current = editor
 
-  // 🔥 MAIN FUNCTION (FIXED)
   const createShapesForStep = async (step) => {
     const ed = editorRef.current
     if (!ed || !step) return
@@ -52,10 +50,8 @@ export default function useTeaching(sessionId, editor) {
     const allShapes = ed.getCurrentPageShapes()
 
     let yStart = 100
-
     if (allShapes.length > 0) {
       let maxY = 0
-
       allShapes.forEach((shape) => {
         const bounds = ed.getShapePageBounds(shape.id)
         if (bounds) {
@@ -63,22 +59,21 @@ export default function useTeaching(sessionId, editor) {
           if (bottom > maxY) maxY = bottom
         }
       })
-
       yStart = maxY + 120
     }
 
     const content = step.canvas.content || ''
     const points = step.canvas.important_points || []
 
-    // 🟫 Shadow
+    // 🟫 Subtle border (Gamma feel)
     ed.createShape({
       type: 'geo',
-      x: xStart - 6,
-      y: yStart - 6,
+      x: xStart - 1,
+      y: yStart - 1,
       props: {
         geo: 'rectangle',
-        w: SLIDE_WIDTH + 12,
-        h: SLIDE_HEIGHT + 12,
+        w: SLIDE_WIDTH + 2,
+        h: SLIDE_HEIGHT + 2,
         fill: 'solid',
         color: 'grey',
         size: 's',
@@ -86,7 +81,7 @@ export default function useTeaching(sessionId, editor) {
       },
     })
 
-    // ⬜ Slide
+    // ⬜ Main slide
     ed.createShape({
       type: 'geo',
       x: xStart,
@@ -106,12 +101,12 @@ export default function useTeaching(sessionId, editor) {
     ed.createShape({
       type: 'text',
       x: xStart + 40,
-      y: yStart + 40,
+      y: yStart + 50,
       props: {
         richText: toRichText(step.canvas.title || step.topic || 'Untitled'),
         color: 'black',
         size: 'xl',
-        font: 'sans',
+        font: 'serif',
         w: 720,
       },
     })
@@ -120,7 +115,7 @@ export default function useTeaching(sessionId, editor) {
     ed.createShape({
       type: 'geo',
       x: xStart + 40,
-      y: yStart + 90,
+      y: yStart + 100,
       props: {
         geo: 'rectangle',
         w: 200,
@@ -136,7 +131,7 @@ export default function useTeaching(sessionId, editor) {
     const contentShape = ed.createShape({
       type: 'text',
       x: xStart + 40,
-      y: yStart + 120,
+      y: yStart + 140,
       props: {
         richText: toRichText(''),
         color: 'black',
@@ -166,12 +161,12 @@ export default function useTeaching(sessionId, editor) {
         ed.createShape({
           type: 'text',
           x: xStart + 40,
-          y: yStart + 300,
+          y: yStart + 320,
           props: {
             richText: toRichText('Key Points'),
             color: 'black',
             size: 'l',
-            font: 'sans',
+            font: 'serif',
             w: 720,
           },
         })
@@ -179,7 +174,7 @@ export default function useTeaching(sessionId, editor) {
         ed.createShape({
           type: 'text',
           x: xStart + 50,
-          y: yStart + 340,
+          y: yStart + 360,
           props: {
             richText: toRichText(points.map(p => `• ${p}`).join('\n')),
             color: 'black',
@@ -203,14 +198,27 @@ export default function useTeaching(sessionId, editor) {
       }
     }
 
-    // ✅ Scroll to new slide
+    // 🎯 Slide number
+    ed.createShape({
+      type: 'text',
+      x: xStart + 700,
+      y: yStart + 20,
+      props: {
+        richText: toRichText(`Slide ${allShapes.length + 1}`),
+        color: 'grey',
+        size: 's',
+        font: 'sans',
+      },
+    })
+
+    // 🎬 Smooth camera
     ed.setCamera(
       {
         x: 0,
-        y: yStart - 100,
+        y: yStart - 200,
         z: 1,
       },
-      { animation: { duration: 400 } }
+      { animation: { duration: 500 } }
     )
   }
 
