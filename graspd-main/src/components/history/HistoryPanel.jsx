@@ -149,7 +149,7 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   return (
