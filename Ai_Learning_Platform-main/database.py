@@ -11,9 +11,17 @@ def get_db_conn():
     return conn
 
 def init_db():
-    """Initialize the database tables."""
     conn = get_db_conn()
     cur = conn.cursor()
+    # New table: document_slides (for slide/page-based teaching)
+    cur.execute("""CREATE TABLE IF NOT EXISTS document_slides (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT,
+        file_path TEXT,
+        slide_index INTEGER,
+        title TEXT,
+        content TEXT
+    )""")
     cur.execute("""CREATE TABLE IF NOT EXISTS sessions (
                     session_id TEXT PRIMARY KEY,
                     name TEXT,
@@ -42,7 +50,6 @@ def init_db():
         page_number INTEGER,
         content TEXT
     )""")
-
     # New table: document_topics
     cur.execute("""CREATE TABLE IF NOT EXISTS document_topics (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,17 +60,36 @@ def init_db():
         start_chunk_index INTEGER,
         end_chunk_index INTEGER
     )""")
-
     conn.commit()
-
     # Migration: Add name column if it doesn't exist
     try:
         cur.execute("ALTER TABLE sessions ADD COLUMN name TEXT")
         conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
-
     return conn
+
+# -------------------- SLIDES (PAGE-BASED) --------------------
+def add_slide_to_db(session_id: str, file_path: str, slide_index: int, content: str, title: str = ""):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO document_slides (session_id, file_path, slide_index, title, content) VALUES (?, ?, ?, ?, ?)",
+        (session_id, file_path, slide_index, title, content)
+    )
+    conn.commit()
+
+def get_slides_for_file(session_id: str, file_path: str):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT slide_index, title, content FROM document_slides WHERE session_id = ? AND file_path = ? ORDER BY slide_index ASC",
+        (session_id, file_path)
+    )
+    # Return as list of dicts for easier use
+    return [
+        {"slide_index": row[0], "title": row[1], "content": row[2]} for row in cur.fetchall()
+    ]
 
 def get_sessions_from_db():
     """Get all session IDs from the database."""

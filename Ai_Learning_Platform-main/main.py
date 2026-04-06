@@ -65,7 +65,8 @@ from fastapi.responses import StreamingResponse
 from database import (
     init_db, get_sessions_from_db, add_session_to_db, delete_session_from_db,
     add_history_to_db, get_history_from_db, add_file_to_db, update_session_name, get_session_name, get_files_from_db,
-    add_chunk_to_db, get_chunks_for_file, get_chunks_by_range, add_topic_to_db, get_topics_for_file
+    add_chunk_to_db, get_chunks_for_file, get_chunks_by_range, add_topic_to_db, get_topics_for_file,
+    add_slide_to_db, get_slides_for_file
 )
 
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
@@ -285,12 +286,13 @@ async def upload_documents(
     if session_id not in get_sessions_from_db():
         raise HTTPException(status_code=404, detail="Session not found")
 
+
     failed_files = []
     session_upload_dir = os.path.join(UPLOAD_DIR, session_id)
     os.makedirs(session_upload_dir, exist_ok=True)
 
-    all_splits = []  # For Chroma
-    chunk_db_count = 0
+    all_splits = []  # For Chroma (chat only)
+    slide_db_count = 0
 
     for uploaded_file in files:
         file_ext = uploaded_file.filename.split('.')[-1].lower()
@@ -324,30 +326,43 @@ async def upload_documents(
 
             add_file_to_db(session_id, uploaded_file.filename, file_path)
 
-            # Split into chunks (sequential, structured)
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=2000,
-                chunk_overlap=200
-            )
-            splits = splitter.split_documents(docs)
-            all_splits.extend(splits)
 
-            # Store chunks in DB with order
-            for idx, chunk in enumerate(splits):
-                # Try to get page_number from metadata if available
-                page_number = chunk.metadata.get("page", 0) if hasattr(chunk, "metadata") else 0
-                add_chunk_to_db(session_id, file_path, idx, page_number, chunk.page_content)
-                chunk_db_count += 1
+            # --- SLIDE/PAGE extraction for teaching (with title/body split) ---
+            slides = []  # Each is a dict: {"title": ..., "content": ...}
+            if file_ext == "pdf":
+                for idx, doc in enumerate(docs):
+                    content = doc.page_content.strip()
+                    lines = [l.strip() for l in content.split("\n") if l.strip()]
+                    title = lines[0] if lines else "Untitled"
+                    body = "\n".join(lines[1:]) if len(lines) > 1 else ""
+                    # If both title and body are empty, treat as image-only
+                    if not title and not body:
+                        title = "[IMAGE ONLY PAGE]"
+                        body = ""
+                    add_slide_to_db(session_id, file_path, idx, body, title)
+                    slides.append({"title": title, "content": body})
+                    slide_db_count += 1
+            elif file_ext == "docx":
+                content = docs[0].page_content.strip() if docs else ""
+                lines = [l.strip() for l in content.split("\n") if l.strip()]
+                title = lines[0] if lines else "Untitled"
+                body = "\n".join(lines[1:]) if len(lines) > 1 else ""
+                if not title and not body:
+                    title = "[IMAGE ONLY PAGE]"
+                    body = ""
+                add_slide_to_db(session_id, file_path, 0, body, title)
+                slides.append({"title": title, "content": body})
+                slide_db_count += 1
 
-
-
-            # Topic generation: sample first 5 and 5 from middle
-            sample_chunks = splits[:5]
-            mid = len(splits) // 2
-            sample_chunks += splits[mid:mid+5]
-            topic_text = "\n\n".join([c.page_content for c in sample_chunks])
+            # --- Topic generation: use only slide titles ---
+            slide_titles = [s["title"] for s in slides if s["title"] and s["title"] != "[IMAGE ONLY PAGE]"]
+            topic_text = "\n".join(slide_titles[:15])
             topic_prompt = f"""
-Extract 4-6 main topics in logical teaching order.
+These are slide titles from a presentation:
+
+{topic_text}
+
+Generate 4-6 main topics in logical teaching order.
 
 Return ONLY a valid JSON array of strings.
 Do NOT add explanation.
@@ -355,10 +370,7 @@ Do NOT add markdown.
 Do NOT add text before or after.
 
 Example:
-["Topic 1", "Topic 2"]
-
-Text:
-{topic_text}
+[\"Topic 1\", \"Topic 2\"]
 """
 
             # Use direct LLM call for topic extraction (NO RAG)
@@ -374,22 +386,30 @@ Text:
                 })
                 raise HTTPException(500, "Topic extraction failed")
 
-            # Map topics to chunk ranges (even split)
-            total_chunks = len(splits)
+            # Map topics to slide ranges (even split)
+            total_slides = len(slides)
             num_topics = len(topics)
-            base = total_chunks // num_topics
-            rem = total_chunks % num_topics
-            chunk_ranges = []
+            base = total_slides // num_topics
+            rem = total_slides % num_topics
+            slide_ranges = []
             start = 0
             for i in range(num_topics):
                 end = start + base + (1 if i < rem else 0)
-                chunk_ranges.append((start, end-1))
+                slide_ranges.append((start, end-1))
                 start = end
 
             # Store topics and mapping in DB
             for i, topic in enumerate(topics):
-                rng = chunk_ranges[i]
+                rng = slide_ranges[i]
                 add_topic_to_db(session_id, file_path, i, topic, rng[0], rng[1])
+
+            # --- Chroma chunking for chat endpoint only ---
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=2000,
+                chunk_overlap=200
+            )
+            splits = splitter.split_documents(docs)
+            all_splits.extend(splits)
 
         except Exception as e:
             failed_files.append({
@@ -412,7 +432,7 @@ Text:
 
     return {
         "message": "Upload successful",
-        "chunks": chunk_db_count,
+        "slides": slide_db_count,
         "failed_files": failed_files
     }
 
@@ -448,14 +468,39 @@ def _make_teaching_step(session_id: str):
     if idx_topic >= len(topics_db):
         return {"message": "Teaching completed"}
 
+
     topic_row = topics_db[idx_topic]
     topic = topic_row[1]
-    start_chunk = topic_row[2]
-    end_chunk = topic_row[3]
+    start_slide = topic_row[2]
+    end_slide = topic_row[3]
 
-    # --- Get chunks ---
-    chunks = get_chunks_by_range(session_id, file_path, start_chunk, end_chunk)
-    context_fragment = "\n\n".join([c[2] for c in chunks])
+    # --- Get slides ---
+    slides = get_slides_for_file(session_id, file_path)
+    if not slides or start_slide > end_slide or start_slide < 0 or end_slide >= len(slides):
+        raise HTTPException(500, "Invalid slide range for topic")
+    selected_slides = slides[start_slide:end_slide+1]
+    # If all slides are image-only or empty, fallback to visual slide response
+    if all((not s["content"] or s["content"] == "[IMAGE ONLY PAGE]") for s in selected_slides):
+        # Use the first slide's title if available
+        slide_title = selected_slides[0]["title"] if selected_slides and selected_slides[0]["title"] else "[IMAGE ONLY PAGE]"
+        return {
+            "step": idx_topic + 1,
+            "pdf_index": idx_pdf,
+            "topic_index": idx_topic,
+            "topic": topic,
+            "canvas": {
+                "title": slide_title,
+                "content": "This slide represents a visual diagram or UI flow.",
+                "important_points": []
+            },
+            "voice": {
+                "script": "This slide shows a visual representation. Please observe it carefully."
+            }
+        }
+    # Otherwise, build context with titles and content
+    context_fragment = "\n\n".join([
+        f"Title: {s['title']}\nContent:\n{s['content']}" for s in selected_slides
+    ])
     context_fragment = context_fragment[:3500]
 
     # --- Prompt ---
