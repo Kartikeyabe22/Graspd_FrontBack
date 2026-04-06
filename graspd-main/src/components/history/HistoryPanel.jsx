@@ -11,8 +11,11 @@ import {
 } from '../../services/storage'
 import HistoryItem from './HistoryItem'
 import styles from './HistoryPanel.module.css'
+import { useNavigate } from 'react-router-dom';
+import { logout } from '../../utils/auth';
 
 export default function HistoryPanel({ editor, activeSessionId, onSessionChange, onCollapse }) {
+  const navigate = useNavigate();
   const [history, setHistory]     = useState([])
   const [collapsed, setCollapsed] = useState(false)
   const creatingRef               = useRef(false) // guard against double-fire
@@ -144,8 +147,13 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
     earlier:   'Earlier',
   }
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   return (
-    <div className={`${styles.panel} ${collapsed ? styles.collapsed : ''}`}>
+    <div className={`${styles.panel} ${collapsed ? styles.collapsed : ''}`} style={{position: 'fixed'}}>
       <div className={styles.header}>
         {!collapsed && <span className={styles.title}>canvases</span>}
         <button
@@ -164,7 +172,7 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
             new canvas
           </button>
 
-          <div className={styles.list}>
+          <div className={styles.list} style={{marginBottom: 70}}>
             {history.length === 0 ? (
               <div className={styles.empty}>
                 no canvases yet.<br />generate a topic to start.
@@ -188,6 +196,14 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
                 ) : null
               )
             )}
+          </div>
+          <div className={styles.logoutBtnWrapper}>
+            <button
+              onClick={handleLogout}
+              className={styles.logoutBtn}
+            >
+              Logout
+            </button>
           </div>
         </>
       )}
