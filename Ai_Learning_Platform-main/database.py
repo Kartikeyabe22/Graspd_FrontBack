@@ -22,6 +22,15 @@ def init_db():
         title TEXT,
         content TEXT
     )""")
+    # Users table for authentication
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        hashed_password TEXT NOT NULL,
+        created_at TEXT
+    )
+    """)
     cur.execute("""CREATE TABLE IF NOT EXISTS sessions (
                     session_id TEXT PRIMARY KEY,
                     name TEXT,

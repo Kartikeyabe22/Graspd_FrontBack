@@ -69,6 +69,9 @@ from database import (
     add_slide_to_db, get_slides_for_file
 )
 
+# Import auth router
+from auth import router as auth_router
+
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_chroma import Chroma
@@ -185,6 +188,7 @@ def load_docx_file(file_path):
     return [Document(page_content=content, metadata={"source": file_path})]
 
 # -------------------- FASTAPI --------------------
+
 app = FastAPI(title="Graspd API")
 
 app.add_middleware(
@@ -194,6 +198,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register auth router
+app.include_router(auth_router)
 
 # -------------------- MODELS --------------------
 class SessionCreate(BaseModel):
