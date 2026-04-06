@@ -6,7 +6,7 @@ from jose import jwt, JWTError
 from pydantic import BaseModel
 import sqlite3
 
-from database import get_db_conn
+from database import get_all_users, get_db_conn
 
 # ================= CONFIG =================
 SECRET_KEY = "CHANGE_THIS_IN_PRODUCTION"
@@ -137,3 +137,8 @@ def get_current_user(token: str = Depends(oauth2_bearer)):
 @router.get("/me")
 def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
+
+# 🔹 GET ALL USERS (SAFE)
+@router.get("/users")
+def get_all_users_route():
+    return get_all_users()

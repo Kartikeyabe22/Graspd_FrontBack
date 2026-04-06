@@ -214,3 +214,22 @@ def get_topics_for_file(session_id: str, file_path: str):
         (session_id, file_path)
     )
     return cur.fetchall()
+
+def get_all_users():
+    conn = get_db_conn()
+    try:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, created_at FROM users")
+        users = cur.fetchall()
+
+        return [
+            {
+                "id": user["id"],
+                "username": user["username"],
+                "created_at": user["created_at"]
+            }
+            for user in users
+        ]
+    finally:
+        conn.close()
