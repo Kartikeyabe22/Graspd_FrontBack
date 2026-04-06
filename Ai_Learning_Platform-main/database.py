@@ -33,15 +33,36 @@ def init_db():
                     local_path TEXT,
                     uploaded_at TEXT
                     )""")
+    # New table: document_chunks
+    cur.execute("""CREATE TABLE IF NOT EXISTS document_chunks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT,
+        file_path TEXT,
+        chunk_index INTEGER,
+        page_number INTEGER,
+        content TEXT
+    )""")
+
+    # New table: document_topics
+    cur.execute("""CREATE TABLE IF NOT EXISTS document_topics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT,
+        file_path TEXT,
+        topic_index INTEGER,
+        topic_text TEXT,
+        start_chunk_index INTEGER,
+        end_chunk_index INTEGER
+    )""")
+
     conn.commit()
-    
+
     # Migration: Add name column if it doesn't exist
     try:
         cur.execute("ALTER TABLE sessions ADD COLUMN name TEXT")
         conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
-    
+
     return conn
 
 def get_sessions_from_db():
@@ -111,4 +132,50 @@ def get_files_from_db(session_id: str):
     conn = get_db_conn()
     cur = conn.cursor()
     cur.execute("SELECT file_name, local_path, uploaded_at FROM session_files WHERE session_id = ? ORDER BY uploaded_at", (session_id,))
+    return cur.fetchall()
+
+# -------------------- CHUNKS & TOPICS --------------------
+def add_chunk_to_db(session_id: str, file_path: str, chunk_index: int, page_number: int, content: str):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO document_chunks (session_id, file_path, chunk_index, page_number, content) VALUES (?, ?, ?, ?, ?)",
+        (session_id, file_path, chunk_index, page_number, content)
+    )
+    conn.commit()
+
+def get_chunks_for_file(session_id: str, file_path: str):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT chunk_index, page_number, content FROM document_chunks WHERE session_id = ? AND file_path = ? ORDER BY chunk_index ASC",
+        (session_id, file_path)
+    )
+    return cur.fetchall()
+
+def get_chunks_by_range(session_id: str, file_path: str, start_chunk: int, end_chunk: int):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT chunk_index, page_number, content FROM document_chunks WHERE session_id = ? AND file_path = ? AND chunk_index >= ? AND chunk_index <= ? ORDER BY chunk_index ASC",
+        (session_id, file_path, start_chunk, end_chunk)
+    )
+    return cur.fetchall()
+
+def add_topic_to_db(session_id: str, file_path: str, topic_index: int, topic_text: str, start_chunk_index: int, end_chunk_index: int):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO document_topics (session_id, file_path, topic_index, topic_text, start_chunk_index, end_chunk_index) VALUES (?, ?, ?, ?, ?, ?)",
+        (session_id, file_path, topic_index, topic_text, start_chunk_index, end_chunk_index)
+    )
+    conn.commit()
+
+def get_topics_for_file(session_id: str, file_path: str):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT topic_index, topic_text, start_chunk_index, end_chunk_index FROM document_topics WHERE session_id = ? AND file_path = ? ORDER BY topic_index ASC",
+        (session_id, file_path)
+    )
     return cur.fetchall()

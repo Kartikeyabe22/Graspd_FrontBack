@@ -1,3 +1,54 @@
+# -------------------- TEACHING JSON OBJECT EXTRACTION --------------------
+# -------------------- SAFE JSON EXTRACTION --------------------
+
+def extract_json_object(text: str):
+    import json
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1:
+        return None
+
+    json_str = text[start:end+1]
+
+    try:
+        return json.loads(json_str)
+    except Exception:
+        return None
+
+
+def extract_json_array(text: str):
+    import re, json
+
+    match = re.search(r"\[.*?\]", text, re.DOTALL)
+    if not match:
+        return None
+
+    try:
+        return json.loads(match.group())
+    except Exception:
+        return None
+# -------------------- DIRECT LLM (NO RAG) --------------------
+# -------------------- DIRECT LLM --------------------
+
+def run_llm_direct(prompt_text: str) -> str:
+    if not api_key:
+        raise Exception("Missing GROQ_API_KEY")
+
+    llm = ChatGroq(
+        groq_api_key=api_key,
+        model_name="llama-3.1-8b-instant",
+        temperature=0
+    )
+
+    response = llm.invoke(prompt_text)
+
+    # Proper extraction
+    try:
+        return response.content.strip()
+    except:
+        return str(response).strip()
 import os
 import shutil
 import json
@@ -13,7 +64,8 @@ from fastapi.responses import StreamingResponse
 
 from database import (
     init_db, get_sessions_from_db, add_session_to_db, delete_session_from_db,
-    add_history_to_db, get_history_from_db, add_file_to_db, update_session_name, get_session_name, get_files_from_db
+    add_history_to_db, get_history_from_db, add_file_to_db, update_session_name, get_session_name, get_files_from_db,
+    add_chunk_to_db, get_chunks_for_file, get_chunks_by_range, add_topic_to_db, get_topics_for_file
 )
 
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
@@ -100,23 +152,6 @@ def save_vectorstore(session_id: str, vectorstore_obj):
     vectorstores[session_id] = vectorstore_obj
 
 
-def get_rag_relevant_context(session_id: str, file_path: str, topic: str, k: int = 1):
-    vs = vectorstores.get(session_id) or load_vectorstore(session_id)
-    if vs is None:
-        return ""
-
-    context_docs = []
-    try:
-        # If source filtering is supported, use it
-        context_docs = vs.similarity_search(topic, k=k, filter={"source": file_path})
-    except Exception:
-        try:
-            context_docs = vs.similarity_search(topic, k=k)
-        except Exception:
-            context_docs = []
-
-    context_text = "\n\n".join([doc.page_content for doc in context_docs if getattr(doc, 'page_content', None)])
-    return context_text[:300]  # bound size for prompt safety
 
 
 def run_professor_prompt(session_id: str, prompt_text: str):
@@ -241,6 +276,7 @@ def delete_session(session_id: str):
     return {"message": f"{session_id} deleted"}
 
 # -------------------- UPLOAD API --------------------
+
 @app.post("/sessions/{session_id}/upload")
 async def upload_documents(
     session_id: str,
@@ -249,11 +285,12 @@ async def upload_documents(
     if session_id not in get_sessions_from_db():
         raise HTTPException(status_code=404, detail="Session not found")
 
-    documents = []
     failed_files = []
-
     session_upload_dir = os.path.join(UPLOAD_DIR, session_id)
     os.makedirs(session_upload_dir, exist_ok=True)
+
+    all_splits = []  # For Chroma
+    chunk_db_count = 0
 
     for uploaded_file in files:
         file_ext = uploaded_file.filename.split('.')[-1].lower()
@@ -280,81 +317,108 @@ async def upload_documents(
             if file_ext == "pdf":
                 loader = PyPDFLoader(file_path)
                 docs = loader.load()
-
             elif file_ext == "docx":
                 docs = load_docx_file(file_path)
-
             else:
                 raise Exception("Unsupported format")
 
-            documents.extend(docs)
             add_file_to_db(session_id, uploaded_file.filename, file_path)
 
-        except Exception as e:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            # Split into chunks (sequential, structured)
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=2000,
+                chunk_overlap=200
+            )
+            splits = splitter.split_documents(docs)
+            all_splits.extend(splits)
 
+            # Store chunks in DB with order
+            for idx, chunk in enumerate(splits):
+                # Try to get page_number from metadata if available
+                page_number = chunk.metadata.get("page", 0) if hasattr(chunk, "metadata") else 0
+                add_chunk_to_db(session_id, file_path, idx, page_number, chunk.page_content)
+                chunk_db_count += 1
+
+
+
+            # Topic generation: sample first 5 and 5 from middle
+            sample_chunks = splits[:5]
+            mid = len(splits) // 2
+            sample_chunks += splits[mid:mid+5]
+            topic_text = "\n\n".join([c.page_content for c in sample_chunks])
+            topic_prompt = f"""
+Extract 4-6 main topics in logical teaching order.
+
+Return ONLY a valid JSON array of strings.
+Do NOT add explanation.
+Do NOT add markdown.
+Do NOT add text before or after.
+
+Example:
+["Topic 1", "Topic 2"]
+
+Text:
+{topic_text}
+"""
+
+            # Use direct LLM call for topic extraction (NO RAG)
+            raw_topics = run_llm_direct(topic_prompt)
+            print("RAW TOPICS RESPONSE:", raw_topics)
+            topics = extract_json_array(raw_topics)
+            print("PARSED TOPICS:", topics)
+            # Validate topics
+            if not isinstance(topics, list) or len(topics) < 1 or not all(isinstance(t, str) for t in topics):
+                failed_files.append({
+                    "filename": uploaded_file.filename,
+                    "error": "Topic extraction failed"
+                })
+                raise HTTPException(500, "Topic extraction failed")
+
+            # Map topics to chunk ranges (even split)
+            total_chunks = len(splits)
+            num_topics = len(topics)
+            base = total_chunks // num_topics
+            rem = total_chunks % num_topics
+            chunk_ranges = []
+            start = 0
+            for i in range(num_topics):
+                end = start + base + (1 if i < rem else 0)
+                chunk_ranges.append((start, end-1))
+                start = end
+
+            # Store topics and mapping in DB
+            for i, topic in enumerate(topics):
+                rng = chunk_ranges[i]
+                add_topic_to_db(session_id, file_path, i, topic, rng[0], rng[1])
+
+        except Exception as e:
             failed_files.append({
                 "filename": uploaded_file.filename,
                 "error": str(e)
             })
 
-    if not documents:
+    if not all_splits:
         raise HTTPException(status_code=400, detail={"errors": failed_files})
 
-    # Split + Embed
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=2000,
-        chunk_overlap=200
-    )
-    splits = splitter.split_documents(documents)
-
+    # Chroma vectorstore for chat endpoint only
     vectorstore_dir = vectorstore_dir_for_session(session_id)
     os.makedirs(vectorstore_dir, exist_ok=True)
-
     vectorstore = Chroma.from_documents(
-        documents=splits,
+        documents=all_splits,
         embedding=embeddings,
         persist_directory=vectorstore_dir
     )
-
     save_vectorstore(session_id, vectorstore)
 
     return {
         "message": "Upload successful",
-        "chunks": len(splits),
+        "chunks": chunk_db_count,
         "failed_files": failed_files
     }
 
 
-def _make_teacher_topics(session_id: str, file_name: str, file_path: str):
-    source_context = get_rag_relevant_context(session_id, file_path, f"Main topics for {file_name}", k=1)
 
-    teacher_prompt = f"""You are a professor.
-
-From the document content below (PDF file: {file_name}), extract 4-6 main topics in logical teaching order.
-Keep topics concise and meaningful.
-Return STRICT JSON array only, e.g. [\"Topic 1\", \"Topic 2\"] (no explanation, no markdown, no extras).
-
-Context:
-{source_context}
-"""
-
-    raw = run_professor_prompt(session_id, teacher_prompt)
-
-    try:
-        topics = json.loads(raw)
-        if not isinstance(topics, list) or not all(isinstance(t, str) for t in topics):
-            raise ValueError("Invalid topic response format")
-    except Exception:
-        raise HTTPException(500, f"Failed to parse topics for file {file_name}. raw: {raw[:800]}")
-
-    if len(topics) < 1:
-        raise HTTPException(500, f"No topics extracted for {file_name}")
-
-    return topics
-
-
+# --- New teaching step logic: sequential chunk fetching, no similarity_search ---
 def _make_teaching_step(session_id: str):
     if session_id not in teaching_sessions:
         raise HTTPException(400, "Teaching session not started")
@@ -372,16 +436,32 @@ def _make_teaching_step(session_id: str):
         return {"message": "Teaching completed"}
 
     current_pdf = pdfs[idx_pdf]
-    topics = current_pdf.get("topics", [])
+    file_path = current_pdf.get("file_path")
 
-    if idx_topic >= len(topics):
+    # --- Get topics ---
+    topics_db = get_topics_for_file(session_id, file_path)
+    print("TOPICS DB:", topics_db)
+
+    if not topics_db:
+        raise HTTPException(400, "No topics found. Upload may have failed.")
+
+    if idx_topic >= len(topics_db):
         return {"message": "Teaching completed"}
 
-    topic = topics[idx_topic]
-    file_path = current_pdf.get("file_path")
-    context_fragment = get_rag_relevant_context(session_id, file_path, topic, k=1)
+    topic_row = topics_db[idx_topic]
+    topic = topic_row[1]
+    start_chunk = topic_row[2]
+    end_chunk = topic_row[3]
 
-    teaching_prompt = f"""You are a professor teaching a student step-by-step.
+    # --- Get chunks ---
+    chunks = get_chunks_by_range(session_id, file_path, start_chunk, end_chunk)
+    context_fragment = "\n\n".join([c[2] for c in chunks])
+    context_fragment = context_fragment[:3500]
+
+    # --- Prompt ---
+    teaching_prompt = f"""
+You are a professor teaching a student step-by-step.
+
 Topic: {topic}
 
 Instructions:
@@ -390,43 +470,91 @@ Instructions:
 - Highlight important points for exams
 - Avoid unnecessary details
 
-Use only the provided relevant context.
+You MUST return ONLY valid JSON.
+Do NOT use markdown.
+Do NOT add headings.
+Do NOT add any text before or after JSON.
 
-Context:
-{context_fragment}
+STRICT OUTPUT FORMAT:
 
-Output STRICT JSON ONLY, no markdown:
 {{
   "canvas": {{
     "title": "{topic}",
-    "content": "(2-4 lines explanation)",
-    "important_points": ["..."]
+    "content": "2-4 line explanation",
+    "important_points": ["point1", "point2"]
   }},
   "voice": {{
-    "script": "(more natural, slightly longer explanation)"
+    "script": "slightly longer natural explanation"
   }}
 }}
+
+Context:
+{context_fragment}
 """
 
-    raw = run_professor_prompt(session_id, teaching_prompt)
+    # --- LLM Call ---
+    raw = run_llm_direct(teaching_prompt)
+    print("RAW TEACHING RESPONSE:", raw)
 
-    try:
-        structured = json.loads(raw)
-        if not isinstance(structured, dict) or "canvas" not in structured or "voice" not in structured:
-            raise ValueError("Invalid teaching step format")
-    except Exception:
-        raise HTTPException(500, f"Failed to parse teaching step for topic {topic}. raw: {raw[:1200]}")
+    structured = extract_json_object(raw)
+    print("PARSED STRUCTURED:", structured)
+
+    # =========================
+    # 🔥 FALLBACK LOGIC (KEY)
+    # =========================
+
+    if not structured:
+        structured = {
+            "canvas": {
+                "title": topic,
+                "content": raw[:200],
+                "important_points": []
+            },
+            "voice": {
+                "script": raw[:500]
+            }
+        }
+
+    elif "canvas" not in structured or "voice" not in structured:
+
+        # Case: only canvas returned
+        if isinstance(structured, dict) and "title" in structured:
+            structured = {
+                "canvas": structured,
+                "voice": {
+                    "script": structured.get("content", "")
+                }
+            }
+
+        # fallback
+        else:
+            structured = {
+                "canvas": {
+                    "title": topic,
+                    "content": raw[:200],
+                    "important_points": []
+                },
+                "voice": {
+                    "script": raw[:500]
+                }
+            }
+
+    # Final safety
+    if "canvas" not in structured or "voice" not in structured:
+        raise HTTPException(500, "Failed to build valid teaching response")
 
     return {
         "step": idx_topic + 1,
         "pdf_index": idx_pdf,
         "topic_index": idx_topic,
         "topic": topic,
-        "canvas": structured.get("canvas"),
-        "voice": structured.get("voice")
+        "canvas": structured["canvas"],
+        "voice": structured["voice"]
     }
 
 
+
+# --- New teaching start: fetch topics from DB, no similarity_search ---
 @app.post("/sessions/{session_id}/teach/start")
 def start_teaching(session_id: str):
     if session_id not in get_sessions_from_db():
@@ -437,37 +565,38 @@ def start_teaching(session_id: str):
         raise HTTPException(400, "No PDFs uploaded for this session")
 
     teaching_state_pdfs = []
-
     for file in files:
         file_name = file["file_name"]
         file_path = file["local_path"]
-        topics = ["Overview", "Key Concepts", "Important Details", "Summary"]
-        #topics = _make_teacher_topics(session_id, file_name, file_path)
-        teaching_state_pdfs.append({"file_name": file_name, "file_path": file_path, "topics": topics})
+        # topics will be fetched from DB in _make_teaching_step
+        teaching_state_pdfs.append({"file_name": file_name, "file_path": file_path})
 
     teaching_sessions[session_id] = {
         "pdfs": teaching_state_pdfs,
         "current_pdf_index": 0,
         "current_topic_index": 0
     }
-
     return _make_teaching_step(session_id)
 
 
+
+# --- New teaching next: use DB topic count, no similarity_search ---
 @app.post("/sessions/{session_id}/teach/next")
 def next_teaching_step(session_id: str):
     if session_id not in get_sessions_from_db():
         raise HTTPException(404, "Session not found")
-
     if session_id not in teaching_sessions:
         raise HTTPException(400, "Teaching not started")
 
     state = teaching_sessions[session_id]
     state["current_topic_index"] += 1
 
+    # Get current PDF and topics from DB
     if state["current_pdf_index"] < len(state["pdfs"]):
         current_pdf = state["pdfs"][state["current_pdf_index"]]
-        if state["current_topic_index"] >= len(current_pdf.get("topics", [])):
+        file_path = current_pdf["file_path"]
+        topics_db = get_topics_for_file(session_id, file_path)
+        if state["current_topic_index"] >= len(topics_db):
             state["current_pdf_index"] += 1
             state["current_topic_index"] = 0
 
