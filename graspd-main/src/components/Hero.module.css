@@ -1,0 +1,37 @@
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 96px 48px 88px;
+}
+.eyebrow {
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--t3); margin-bottom: 22px;
+  display: flex; align-items: center; gap: 12px;
+}
+.eyebrow::before { content: ''; width: 28px; height: 1px; background: var(--t3); }
+h1 {
+  font-size: clamp(2.6rem, 4.8vw, 4rem); font-weight: 600;
+  letter-spacing: -.04em; line-height: 1.03; margin-bottom: 20px;
+}
+.accent { font-style: normal; color: var(--green); }
+.sub {
+  font-size: 15px; color: var(--t3); line-height: 1.8;
+  max-width: 390px; font-weight: 300; margin-bottom: 36px;
+}
+.btns { display: flex; gap: 10px; }
+.main {
+  font-size: 13px; font-weight: 500; background: var(--t); color: var(--bg);
+  border: none; padding: 12px 28px; border-radius: 8px;
+  cursor: pointer; font-family: var(--f); transition: background .15s;
+}
+.main:hover { background: #d0d0d0; }
+.outline {
+  font-size: 13px; background: transparent; color: var(--t3);
+  border: 1px solid var(--b2); padding: 12px 28px; border-radius: 8px;
+  cursor: pointer; font-family: var(--f); transition: all .2s;
+}
+.outline:hover { color: var(--t); border-color: var(--b3); }

@@ -1,0 +1,20 @@
+.root {
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  inset: 0;
+  display: flex;
+}
+
+.canvasContainer {
+  position: relative;
+  margin-left: 220px;
+  transition: margin-left .2s ease, width .2s ease;
+  width: calc(100vw - 220px);
+  height: 100%;
+}
+
+.canvasContainer.expanded {
+  margin-left: 40px;
+  width: calc(100vw - 40px);
+}

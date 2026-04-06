@@ -1,0 +1,24 @@
+.section { background: var(--s1); border-top: 1px solid var(--b1); }
+.inner {
+  max-width: 700px; margin: 0 auto;
+  padding: 100px 48px; text-align: center;
+}
+h2 {
+  font-size: clamp(2.2rem, 4vw, 3.2rem); font-weight: 600;
+  letter-spacing: -.04em; line-height: 1.05; margin-bottom: 14px;
+}
+p { font-size: 15px; color: var(--t3); font-weight: 300; line-height: 1.78; margin-bottom: 36px; }
+.row { display: flex; gap: 8px; max-width: 420px; margin: 0 auto; }
+.input {
+  flex: 1; background: var(--s2); border: 1px solid var(--b2); border-radius: 8px;
+  padding: 12px 18px; font-family: var(--f); font-size: 13px; color: var(--t); outline: none;
+  transition: border-color .2s;
+}
+.input::placeholder { color: var(--t4); }
+.input:focus { border-color: var(--b3); }
+.btn {
+  font-size: 13px; font-weight: 500; background: var(--t); color: var(--bg);
+  border: none; padding: 12px 26px; border-radius: 8px; cursor: pointer;
+  font-family: var(--f); white-space: nowrap; transition: background .15s;
+}
+.btn:hover { background: #d0d0d0; }
