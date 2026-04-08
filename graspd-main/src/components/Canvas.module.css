@@ -18,3 +18,41 @@
   margin-left: 40px;
   width: calc(100vw - 40px);
 }
+
+.paletteOpen {
+  --palette-width: 160px;
+}
+
+.paletteToggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 50;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 10, 10, 0.75);
+  color: #e7e7e7;
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.paletteToggle:hover {
+  background: rgba(20, 20, 20, 0.85);
+}
+
+.paletteOpen .paletteToggle {
+  z-index: 200;
+  transform: translateX(calc(-1 * var(--palette-width) + 6px));
+}
+
+.paletteHidden :global(.tlui-style-panel__wrapper),
+.paletteHidden :global(.tlui-style-panel) {
+  display: none;
+}

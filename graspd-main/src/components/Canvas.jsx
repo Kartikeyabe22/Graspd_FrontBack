@@ -11,6 +11,7 @@ export default function Canvas(){
   const [chatOpen, setChatOpen] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [historyCollapsed, setHistoryCollapsed] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   const handleSessionChange = (session) => {
     setActiveSessionId(session.id)
@@ -28,7 +29,17 @@ export default function Canvas(){
         onSessionChange={handleSessionChange}
         onCollapse={handleHistoryCollapse}
       />
-      <div className={`${styles.canvasContainer} ${historyCollapsed ? styles.expanded : ''}`}>
+      <div
+        className={`${styles.canvasContainer} ${historyCollapsed ? styles.expanded : ''} ${paletteOpen ? styles.paletteOpen : styles.paletteHidden}`}
+      >
+        <button
+          className={styles.paletteToggle}
+          onClick={() => setPaletteOpen(prev => !prev)}
+          title={paletteOpen ? 'Hide palette' : 'Show palette'}
+          aria-label={paletteOpen ? 'Hide color palette' : 'Show color palette'}
+        >
+          {paletteOpen ? '›' : '‹'}
+        </button>
         <Tldraw
           inferDarkMode
           persistenceKey="graspd-canvas"
