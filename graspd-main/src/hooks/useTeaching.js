@@ -4,6 +4,11 @@ import { playSpeech } from '../services/tts'
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+function getAuthHeaders() {
+  const token = localStorage.getItem('access_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -229,7 +234,12 @@ export default function useTeaching(sessionId, editor) {
     try {
       const res = await fetch(
         `${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/${path}`,
-        { method: 'POST' }
+        {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+          },
+        }
       )
 
       if (!res.ok) throw new Error(await res.text())

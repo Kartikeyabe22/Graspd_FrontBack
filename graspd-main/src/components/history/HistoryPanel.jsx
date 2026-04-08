@@ -62,16 +62,23 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
 
       editor.setCurrentPage(pageId)
 
+      const topic = 'New canvas'
+      const remote = await createRemoteSession(topic)
       const session = {
-        id:        generateSessionId(),
+        id:        remote?.session_id || generateSessionId(),
         pageId,
-        topic:     'New canvas',
-        createdAt: new Date().toISOString(),
+        topic:     remote?.name || topic,
+        createdAt: remote?.created_at || new Date().toISOString(),
       }
 
+      // DEBUG: Log session creation
+      console.log('handleNewCanvas: session to save:', session)
+
       saveSession(session)
-      createRemoteSession(session.id)
+      console.log('handleNewCanvas: after saveSession')
+      console.log('handleNewCanvas: after createRemoteSession')
       setHistory(await getRemoteHistory())
+      console.log('handleNewCanvas: after setHistory', await getRemoteHistory())
       onSessionChange(session)
     } finally {
       // Release guard after a tick so StrictMode double-fire is ignored
@@ -93,7 +100,9 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
       if (!pageId) return
       editor.setCurrentPage(pageId)
       saveSession({ ...session, pageId })
-      setHistory(getHistory())
+      setHistory(prevHistory =>
+        prevHistory.map(s => (s.id === session.id ? { ...s, pageId } : s))
+      )
     }
 
     onSessionChange(session)
@@ -151,6 +160,9 @@ export default function HistoryPanel({ editor, activeSessionId, onSessionChange,
     logout();
     navigate('/');
   };
+
+  // DEBUG: Log history state before rendering
+  console.log('HistoryPanel: history state before render:', history)
 
   return (
     <div className={`${styles.panel} ${collapsed ? styles.collapsed : ''}`} style={{position: 'fixed'}}>

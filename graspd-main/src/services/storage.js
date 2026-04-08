@@ -31,6 +31,11 @@ export function deleteChatHistory(pageId) {
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+function getAuthHeaders() {
+  const token = localStorage.getItem('access_token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 // Session management functions
 export function getHistory() {
   try {
@@ -58,7 +63,11 @@ export async function fetchRemoteSessions() {
   try {
     const url = `${BACKEND_BASE_URL}/sessions`
     console.log('Fetching sessions from:', url)
-    const response = await fetch(url)
+    const response = await fetch(url, {
+      headers: {
+        ...getAuthHeaders(),
+      },
+    })
     if (!response.ok) {
       throw new Error(`Failed to fetch sessions: ${response.status}`)
     }
@@ -68,11 +77,12 @@ export async function fetchRemoteSessions() {
     // Support both new format and old fallback format
     return sessions.map(item => {
       if (typeof item === 'string') {
-        return { session_id: item, name: item }
+        return { session_id: item, name: item, created_at: null }
       }
       return {
         session_id: item.session_id || item.id || '',
-        name: item.name || item.topic || item.session_id || ''
+        name: item.name || item.topic || item.session_id || '',
+        created_at: item.created_at || item.createdAt || null,
       }
     }).filter(item => item.session_id)
   } catch (error) {
@@ -81,12 +91,15 @@ export async function fetchRemoteSessions() {
   }
 }
 
-export async function createRemoteSession(sessionId) {
+export async function createRemoteSession(name) {
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/sessions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ name: String(name || '').trim() }),
     })
     if (!response.ok) {
       const errText = await response.text()
@@ -103,7 +116,10 @@ export async function updateRemoteSessionName(sessionId, newName) {
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ name: newName }),
     })
     if (!response.ok) {
@@ -121,6 +137,9 @@ export async function deleteRemoteSession(sessionId) {
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}`, {
       method: 'DELETE',
+      headers: {
+        ...getAuthHeaders(),
+      },
     })
     if (!response.ok) {
       const errText = await response.text()
@@ -136,11 +155,11 @@ export async function deleteRemoteSession(sessionId) {
 export async function getRemoteHistory() {
   const remoteSessions = await fetchRemoteSessions()
   
-  return remoteSessions.map(({ session_id, name }) => ({
+  return remoteSessions.map(({ session_id, name, created_at }) => ({
     id: session_id,
     topic: name || session_id,
     pageId: null,
-    createdAt: new Date().toISOString(),
+    createdAt: created_at || new Date().toISOString(),
   }))
 }
 
@@ -165,6 +184,9 @@ export async function uploadDocuments(sessionId, files) {
 
     const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/upload`, {
       method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+      },
       body: formData,
     })
     if (!response.ok) {
@@ -183,7 +205,10 @@ export async function sendChatToBackend(sessionId, query) {
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify({ query: query.trim() }),
     })
     if (!response.ok) {
@@ -202,6 +227,9 @@ export async function getChatHistoryFromBackend(sessionId) {
   try {
     const response = await fetch(`${BACKEND_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/history`, {
       method: 'GET',
+      headers: {
+        ...getAuthHeaders(),
+      },
     })
     if (!response.ok) {
       const errText = await response.text()

@@ -1,3 +1,5 @@
+import os
+
 # -------------------- TEACHING JSON OBJECT EXTRACTION --------------------
 # -------------------- SAFE JSON EXTRACTION --------------------
 
@@ -49,28 +51,32 @@ def run_llm_direct(prompt_text: str) -> str:
         return response.content.strip()
     except:
         return str(response).strip()
-import os
+
 import shutil
 import json
 import uuid
 import docx
-from typing import List, Annotated
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
+
+import uuid
+from typing import List, Annotated, Optional
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from database import (
-    init_db, get_sessions_from_db, add_session_to_db, delete_session_from_db,
+    init_db, get_sessions_from_db, get_sessions_with_created_at, add_session_to_db, delete_session_from_db,
     add_history_to_db, get_history_from_db, add_file_to_db, update_session_name, get_session_name, get_files_from_db,
     add_chunk_to_db, get_chunks_for_file, get_chunks_by_range, add_topic_to_db, get_topics_for_file,
     add_slide_to_db, get_slides_for_file
 )
 
-# Import auth router
-from auth import router as auth_router
+
+# Import auth router and user dependency
+from auth import router as auth_router, get_current_user
 
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -104,7 +110,7 @@ def text_to_speech_stream(text: str):
     try:
         audio = elevenlabs_client.text_to_speech.convert(
             text=text,
-            voice_id="ONwNWTeUTsywCR9UbUPk",  # Your voice ID
+            voice_id="FE4QURxZUK1rVrVK3PlK",  # Your voice ID
             model_id="eleven_v3",
             output_format="mp3_44100_128",
         )
@@ -204,13 +210,9 @@ app.include_router(auth_router)
 
 # -------------------- MODELS --------------------
 class SessionCreate(BaseModel):
-    session_id: str
-
-class SessionUpdate(BaseModel):
     name: str
 
-class SessionInfo(BaseModel):
-    session_id: str
+class SessionUpdate(BaseModel):
     name: str
 
 class ChatQuery(BaseModel):
@@ -224,39 +226,55 @@ class MessageHistory(BaseModel):
     content: str
     timestamp: str
 
+class SessionInfo(BaseModel):
+    session_id: str
+    name: str
+    created_at: Optional[str]
+
+
 # -------------------- STARTUP --------------------
-@app.on_event("startup")
-def startup_event():
-    if not get_sessions_from_db():
-        add_session_to_db("default_session")
+# (Removed default session creation; sessions are now user-specific)
+
 
 # -------------------- SESSION APIs --------------------
 @app.get("/sessions", response_model=List[SessionInfo])
-def get_sessions():
+def get_sessions(current_user: dict = Depends(get_current_user)):
     sessions = []
-    for session_id in get_sessions_from_db():
-        name = get_session_name(session_id)
-        sessions.append({"session_id": session_id, "name": name})
+    for row in get_sessions_with_created_at(user_id=current_user["id"]):
+        session_id = row["session_id"]
+        created_at = row["created_at"]
+        name = get_session_name(session_id, current_user["id"])
+        sessions.append({
+            "session_id": session_id,
+            "name": name,
+            "created_at": created_at,
+        })
     return sessions
 
-@app.post("/sessions")
-def create_session(session: SessionCreate):
-    session_id = session.session_id.strip()
 
-    if not session_id:
+@app.post("/sessions")
+def create_session(session: SessionCreate, current_user: dict = Depends(get_current_user)):
+    session_id = str(uuid.uuid4())
+    name = session.name.strip()
+
+    if not name:
         raise HTTPException(400, "Session name cannot be empty")
 
-    if session_id in get_sessions_from_db():
-        raise HTTPException(400, "Session already exists")
-
-    add_session_to_db(session_id)
+    # No need to check for duplicate session_id, always unique
+    created_at = datetime.utcnow().isoformat()
+    add_session_to_db(session_id, current_user["id"], name, created_at)
     get_session_history(session_id)
 
-    return {"message": "Session created", "session_id": session_id}
+    return {
+        "message": "Session created",
+        "session_id": session_id,
+        "name": name,
+        "created_at": created_at,
+    }
 
 @app.put("/sessions/{session_id}")
-def update_session(session_id: str, session: SessionUpdate):
-    if session_id not in get_sessions_from_db():
+def update_session(session_id: str, session: SessionUpdate, current_user: dict = Depends(get_current_user)):
+    if session_id not in get_sessions_from_db(user_id=current_user["id"]):
         raise HTTPException(404, "Session not found")
     
     new_name = session.name.strip()
@@ -264,18 +282,18 @@ def update_session(session_id: str, session: SessionUpdate):
     if not new_name:
         raise HTTPException(400, "Session name cannot be empty")
     
-    update_session_name(session_id, new_name)
+    update_session_name(session_id, new_name, current_user["id"])
     return {"message": "Session updated", "session_id": session_id, "name": new_name}
 
 @app.delete("/sessions/{session_id}")
-def delete_session(session_id: str):
-    if session_id not in get_sessions_from_db():
+def delete_session(session_id: str, current_user: dict = Depends(get_current_user)):
+    if session_id not in get_sessions_from_db(user_id=current_user["id"]):
         raise HTTPException(404, "Session not found")
 
     store.pop(session_id, None)
     vectorstores.pop(session_id, None)
 
-    delete_session_from_db(session_id)
+    delete_session_from_db(session_id, user_id=current_user["id"])
 
     vector_dir = vectorstore_dir_for_session(session_id)
     if os.path.isdir(vector_dir):
@@ -285,14 +303,15 @@ def delete_session(session_id: str):
 
 # -------------------- UPLOAD API --------------------
 
+
 @app.post("/sessions/{session_id}/upload")
 async def upload_documents(
     session_id: str,
-    files: Annotated[List[UploadFile], File(..., description="Upload PDF or DOCX files")]
+    files: Annotated[List[UploadFile], File(..., description="Upload PDF or DOCX files")],
+    current_user: dict = Depends(get_current_user)
 ):
-    if session_id not in get_sessions_from_db():
+    if session_id not in get_sessions_from_db(user_id=current_user["id"]):
         raise HTTPException(status_code=404, detail="Session not found")
-
 
     failed_files = []
     session_upload_dir = os.path.join(UPLOAD_DIR, session_id)
@@ -331,8 +350,7 @@ async def upload_documents(
             else:
                 raise Exception("Unsupported format")
 
-            add_file_to_db(session_id, uploaded_file.filename, file_path)
-
+            add_file_to_db(session_id, uploaded_file.filename, file_path, user_id=current_user["id"])
 
             # --- SLIDE/PAGE extraction for teaching (with title/body split) ---
             slides = []  # Each is a dict: {"title": ..., "content": ...}
@@ -346,7 +364,7 @@ async def upload_documents(
                     if not title and not body:
                         title = "[IMAGE ONLY PAGE]"
                         body = ""
-                    add_slide_to_db(session_id, file_path, idx, body, title)
+                    add_slide_to_db(session_id, file_path, idx, body, title, user_id=current_user["id"])
                     slides.append({"title": title, "content": body})
                     slide_db_count += 1
             elif file_ext == "docx":
@@ -357,7 +375,7 @@ async def upload_documents(
                 if not title and not body:
                     title = "[IMAGE ONLY PAGE]"
                     body = ""
-                add_slide_to_db(session_id, file_path, 0, body, title)
+                add_slide_to_db(session_id, file_path, 0, body, title, user_id=current_user["id"])
                 slides.append({"title": title, "content": body})
                 slide_db_count += 1
 
@@ -408,7 +426,7 @@ Example:
             # Store topics and mapping in DB
             for i, topic in enumerate(topics):
                 rng = slide_ranges[i]
-                add_topic_to_db(session_id, file_path, i, topic, rng[0], rng[1])
+                add_topic_to_db(session_id, file_path, i, topic, rng[0], rng[1], user_id=current_user["id"])
 
             # --- Chroma chunking for chat endpoint only ---
             splitter = RecursiveCharacterTextSplitter(
@@ -446,7 +464,7 @@ Example:
 
 
 # --- New teaching step logic: sequential chunk fetching, no similarity_search ---
-def _make_teaching_step(session_id: str):
+def _make_teaching_step(session_id: str, user_id: int):
     if session_id not in teaching_sessions:
         raise HTTPException(400, "Teaching session not started")
 
@@ -466,7 +484,7 @@ def _make_teaching_step(session_id: str):
     file_path = current_pdf.get("file_path")
 
     # --- Get topics ---
-    topics_db = get_topics_for_file(session_id, file_path)
+    topics_db = get_topics_for_file(session_id, file_path, user_id)
     print("TOPICS DB:", topics_db)
 
     if not topics_db:
@@ -482,7 +500,7 @@ def _make_teaching_step(session_id: str):
     end_slide = topic_row[3]
 
     # --- Get slides ---
-    slides = get_slides_for_file(session_id, file_path)
+    slides = get_slides_for_file(session_id, file_path, user_id)
     if not slides or start_slide > end_slide or start_slide < 0 or end_slide >= len(slides):
         raise HTTPException(500, "Invalid slide range for topic")
     selected_slides = slides[start_slide:end_slide+1]
@@ -608,11 +626,11 @@ Context:
 
 # --- New teaching start: fetch topics from DB, no similarity_search ---
 @app.post("/sessions/{session_id}/teach/start")
-def start_teaching(session_id: str):
-    if session_id not in get_sessions_from_db():
+def start_teaching(session_id: str, current_user: dict = Depends(get_current_user)):
+    if session_id not in get_sessions_from_db(user_id=current_user["id"]):
         raise HTTPException(404, "Session not found")
 
-    files = get_files_from_db(session_id)
+    files = get_files_from_db(session_id, user_id=current_user["id"])
     if not files:
         raise HTTPException(400, "No PDFs uploaded for this session")
 
@@ -628,14 +646,14 @@ def start_teaching(session_id: str):
         "current_pdf_index": 0,
         "current_topic_index": 0
     }
-    return _make_teaching_step(session_id)
+    return _make_teaching_step(session_id, current_user["id"])
 
 
 
 # --- New teaching next: use DB topic count, no similarity_search ---
 @app.post("/sessions/{session_id}/teach/next")
-def next_teaching_step(session_id: str):
-    if session_id not in get_sessions_from_db():
+def next_teaching_step(session_id: str, current_user: dict = Depends(get_current_user)):
+    if session_id not in get_sessions_from_db(user_id=current_user["id"]):
         raise HTTPException(404, "Session not found")
     if session_id not in teaching_sessions:
         raise HTTPException(400, "Teaching not started")
@@ -647,7 +665,7 @@ def next_teaching_step(session_id: str):
     if state["current_pdf_index"] < len(state["pdfs"]):
         current_pdf = state["pdfs"][state["current_pdf_index"]]
         file_path = current_pdf["file_path"]
-        topics_db = get_topics_for_file(session_id, file_path)
+        topics_db = get_topics_for_file(session_id, file_path, current_user["id"])
         if state["current_topic_index"] >= len(topics_db):
             state["current_pdf_index"] += 1
             state["current_topic_index"] = 0
@@ -656,7 +674,7 @@ def next_teaching_step(session_id: str):
         return {"message": "Teaching completed"}
 
     teaching_sessions[session_id] = state
-    return _make_teaching_step(session_id)
+    return _make_teaching_step(session_id, current_user["id"])
 
 
 # -------------------- TTS API --------------------
@@ -727,8 +745,8 @@ def get_rag_chain_for_session(session_id: str):
 
 # -------------------- CHAT --------------------
 @app.post("/sessions/{session_id}/chat")
-def chat(session_id: str, query: ChatQuery):
-    if session_id not in get_sessions_from_db():
+def chat(session_id: str, query: ChatQuery, current_user: dict = Depends(get_current_user)):
+    if session_id not in get_sessions_from_db(user_id=current_user["id"]):
         raise HTTPException(404, "Session not found")
 
     chain = get_rag_chain_for_session(session_id)
@@ -755,11 +773,11 @@ def chat(session_id: str, query: ChatQuery):
 
 # -------------------- HISTORY --------------------
 @app.get("/sessions/{session_id}/history", response_model=List[MessageHistory])
-def get_history(session_id: str):
-    if session_id not in get_sessions_from_db():
+def get_history(session_id: str, current_user: dict = Depends(get_current_user)):
+    if session_id not in get_sessions_from_db(user_id=current_user["id"]):
         raise HTTPException(404, "Session not found")
 
-    rows = get_history_from_db(session_id)
+    rows = get_history_from_db(session_id, user_id=current_user["id"])
 
     return [
         {
@@ -772,11 +790,11 @@ def get_history(session_id: str):
 
 # -------------------- DOCUMENTS --------------------
 @app.get("/sessions/{session_id}/documents")
-def get_documents(session_id: str):
-    if session_id not in get_sessions_from_db():
+def get_documents(session_id: str, current_user: dict = Depends(get_current_user)):
+    if session_id not in get_sessions_from_db(user_id=current_user["id"]):
         raise HTTPException(404, "Session not found")
 
-    rows = get_files_from_db(session_id)
+    rows = get_files_from_db(session_id, user_id=current_user["id"])
 
     documents = [
         {

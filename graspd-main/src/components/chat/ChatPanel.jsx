@@ -31,7 +31,9 @@ export default function ChatPanel({ editor, open, onClose, activeSessionId }) {
   // ── Watch for session changes ──────────────────────────────────────────────
   useEffect(() => {
     setCurrentSessionId(activeSessionId)
-    
+
+    if (!open) return
+
     // Load chat history from backend if we have a session ID
     async function loadHistory() {
       let historyToLoad = [DEFAULT_GREETING]
@@ -56,12 +58,12 @@ export default function ChatPanel({ editor, open, onClose, activeSessionId }) {
           console.warn('Failed to load backend history:', error)
         }
       }
-      
+
       setMessages(historyToLoad)
     }
-    
+
     loadHistory()
-  }, [activeSessionId])
+  }, [activeSessionId, open])
 
   // ── Watch for page changes (for canvas-specific features) ──────────────────────────────────────────────
   useEffect(() => {

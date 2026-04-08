@@ -36,14 +36,14 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
 
       // Save to history tied to current tldraw page
       const currentPage = editor.getCurrentPage()
+      const remote = await createRemoteSession(randomTopic)
       const session = {
-        id:        generateSessionId(),
+        id:        remote?.session_id || generateSessionId(),
         pageId:    currentPage.id,
-        topic:     randomTopic,
-        createdAt: new Date().toISOString(),
+        topic:     remote?.name || randomTopic,
+        createdAt: remote?.created_at || new Date().toISOString(),
       }
       saveSession(session)
-      await createRemoteSession(session.id)
 
       // Tell history panel to refresh
       window.dispatchEvent(new Event('graspd:history'))
@@ -76,14 +76,15 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
         // Create a new session only if no session is active
         const currentPage = editor.getCurrentPage()
         const currentPageId = currentPage.id
+        const topic = 'Uploaded Document'
+        const remote = await createRemoteSession(topic)
         const session = {
-          id:        generateSessionId(),
+          id:        remote?.session_id || generateSessionId(),
           pageId:    currentPageId,
-          topic:     'Uploaded Document',
-          createdAt: new Date().toISOString(),
+          topic:     remote?.name || topic,
+          createdAt: remote?.created_at || new Date().toISOString(),
         }
         saveSession(session)
-        await createRemoteSession(session.id)
         sessionId = session.id
       }
       
