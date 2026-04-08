@@ -337,13 +337,13 @@ if api_key:
         if conversational_rag_chain is None:
             st.warning("⚠️ Please upload PDF first")
         else:
-            add_history_to_db(session_id, "user", user_input)
+            add_history_to_db(session_id, "user", user_input, user_id=None)
             response = conversational_rag_chain.invoke(
                 {"input": user_input},
                 config={"configurable": {"session_id": session_id}}
             )
             answer_text = response.get("answer", "")
-            add_history_to_db(session_id, "assistant", answer_text)
+            add_history_to_db(session_id, "assistant", answer_text, user_id=None)
 
             st.write("### 🧑 You:")
             st.write(user_input)

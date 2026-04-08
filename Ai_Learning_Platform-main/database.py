@@ -183,7 +183,7 @@ def delete_session_from_db(session_id: str, user_id: int):
     cur.execute("DELETE FROM document_topics WHERE session_id = ? AND user_id = ?", (session_id, user_id))
     conn.commit()
 
-def add_history_to_db(session_id: str, role: str, content: str, user_id: int):
+def add_history_to_db(session_id: str, role: str, content: str, user_id: int = None):
     """Add a message to the chat history for a user."""
     conn = get_db_conn()
     cur = conn.cursor()

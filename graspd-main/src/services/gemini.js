@@ -186,8 +186,10 @@ Analyse the uploaded file carefully. Explain what it shows, identify all key con
 export async function checkSessionHasDocuments(sessionId) {
   try {
     const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const token = localStorage.getItem('access_token')
     const response = await fetch(`${backendUrl}/sessions/${encodeURIComponent(sessionId)}/documents`, {
       method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     if (!response.ok) return false
     
@@ -204,10 +206,14 @@ export async function sendChatMessageToBackend(sessionId, userMessage) {
   try {
     const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
     console.log(`Sending message to backend for session: ${sessionId}`)
+    const token = localStorage.getItem('access_token')
     
     const response = await fetch(`${backendUrl}/sessions/${encodeURIComponent(sessionId)}/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ query: userMessage.trim() }),
     })
     if (!response.ok) {

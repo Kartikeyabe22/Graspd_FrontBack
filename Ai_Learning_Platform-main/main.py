@@ -758,7 +758,7 @@ def chat(session_id: str, query: ChatQuery, current_user: dict = Depends(get_cur
     if not user_input:
         raise HTTPException(400, "Empty query")
 
-    add_history_to_db(session_id, "user", user_input)
+    add_history_to_db(session_id, "user", user_input, user_id=current_user["id"])
 
     response = chain.invoke(
         {"input": user_input},
@@ -767,7 +767,7 @@ def chat(session_id: str, query: ChatQuery, current_user: dict = Depends(get_cur
 
     answer = response.get("answer", "")
 
-    add_history_to_db(session_id, "assistant", answer)
+    add_history_to_db(session_id, "assistant", answer, user_id=current_user["id"])
 
     return {"user": user_input, "assistant": answer}
 
