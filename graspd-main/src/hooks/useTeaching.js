@@ -152,6 +152,14 @@ export default function useTeaching(sessionId, editor, options = {}) {
       ? generateSpeech(step.voice.script)
       : null
 
+    if (speechPromise) {
+      setIsSpeaking(true)
+      speechPromise
+        .then((audioBlob) => playSpeechFromBlob(audioBlob, { playbackRate: voiceRate }))
+        .catch((err) => console.error('Play speech error:', err))
+        .finally(() => setIsSpeaking(false))
+    }
+
     setIsStreaming(true)
 
     try {
@@ -166,13 +174,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
         })
       }
 
-      if (speechPromise) {
-        setIsSpeaking(true)
-        speechPromise
-          .then((audioBlob) => playSpeechFromBlob(audioBlob, { playbackRate: voiceRate }))
-          .catch((err) => console.error('Play speech error:', err))
-          .finally(() => setIsSpeaking(false))
-      }
+      // Voice playback already kicked off in parallel with typing.
 
       if (points.length > 0) {
         ed.createShape({
