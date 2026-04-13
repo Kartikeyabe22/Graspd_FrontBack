@@ -80,14 +80,14 @@ export default function useTeaching(sessionId, editor) {
         geo: 'rectangle',
         w: SLIDE_WIDTH + 2,
         h: SLIDE_HEIGHT + 2,
-        fill: 'solid',
-        color: 'grey',
+        fill: 'none',
+        color: 'black',
         size: 's',
         dash: 'solid',
       },
     })
 
-    // ⬜ Main slide
+    // ⬛ Main slide
     ed.createShape({
       type: 'geo',
       x: xStart,
@@ -96,8 +96,8 @@ export default function useTeaching(sessionId, editor) {
         geo: 'rectangle',
         w: SLIDE_WIDTH,
         h: SLIDE_HEIGHT,
-        fill: 'solid',
-        color: 'white',
+        fill: 'semi',
+        color: 'black',
         size: 'm',
         dash: 'solid',
       },
@@ -110,7 +110,7 @@ export default function useTeaching(sessionId, editor) {
       y: yStart + 50,
       props: {
         richText: toRichText(step.canvas.title || step.topic || 'Untitled'),
-        color: 'black',
+          color: 'white',
         size: 'xl',
         font: 'serif',
         w: 720,
@@ -143,7 +143,7 @@ export default function useTeaching(sessionId, editor) {
       y: yStart + 140,
       props: {
         richText: toRichText(''),
-        color: 'black',
+          color: 'white',
         size: 'l',
         font: 'sans',
         w: 720,
@@ -174,7 +174,7 @@ export default function useTeaching(sessionId, editor) {
           y: yStart + 320,
           props: {
             richText: toRichText('Key Points'),
-            color: 'black',
+              color: 'white',
             size: 'l',
             font: 'serif',
             w: 720,
@@ -188,7 +188,7 @@ export default function useTeaching(sessionId, editor) {
           y: yStart + 360,
           props: {
             richText: toRichText(points.map(p => `• ${p}`).join('\n')),
-            color: 'black',
+              color: 'white',
             size: 's',
             font: 'sans',
             w: 700,
