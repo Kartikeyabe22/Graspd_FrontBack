@@ -26,11 +26,13 @@ export const generateSpeech = async (text) => {
   }
 }
 
-export const playSpeech = async (text) => {
+export const playSpeech = async (text, options = {}) => {
   try {
+    const { playbackRate = 1.5 } = options
     const audioBlob = await generateSpeech(text)
     const audioUrl = URL.createObjectURL(audioBlob)
     const audio = new Audio(audioUrl)
+    audio.playbackRate = playbackRate
     
     return new Promise((resolve, reject) => {
       audio.onended = () => {

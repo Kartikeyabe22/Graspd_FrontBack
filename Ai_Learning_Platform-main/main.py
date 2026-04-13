@@ -66,7 +66,6 @@ from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
 from fastapi.responses import StreamingResponse
 from gtts import gTTS
-from pydub import AudioSegment
 from io import BytesIO
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -126,24 +125,15 @@ def text_to_speech_stream(text: str):
     # gTTS (free)
     try:
         tts = gTTS(text=text, lang="en", slow=False)
+
         buffer = BytesIO()
         tts.write_to_fp(buffer)
         buffer.seek(0)
 
-        # Speed up audio to 1.5x for faster playback.
-        try:
-            audio = AudioSegment.from_file(buffer, format="mp3")
-            faster_audio = audio.speedup(playback_speed=1.5)
-            out_buffer = BytesIO()
-            faster_audio.export(out_buffer, format="mp3")
-            out_buffer.seek(0)
-            return out_buffer
-        except Exception as e:
-            print(f"TTS Speedup Error: {e}")
-            buffer.seek(0)
-            return buffer
+        return buffer
+
     except Exception as e:
-        print(f"TTS Error: {e}")
+        print("TTS Error:", e)
         return None
 
 # -------------------- EMBEDDINGS --------------------

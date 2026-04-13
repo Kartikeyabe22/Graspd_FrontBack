@@ -85,6 +85,35 @@
   flex-shrink: 0;
 }
 
+.rateWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.rateLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #666;
+  font-family: 'Inter', sans-serif;
+}
+
+.rateSlider {
+  width: 90px;
+  accent-color: #e5e5e5;
+}
+
+.rateValue {
+  font-size: 11px;
+  color: #bbb;
+  font-family: 'Inter', sans-serif;
+  min-width: 34px;
+  text-align: right;
+}
+
 .tutorBtn {
   display: flex;
   align-items: center;

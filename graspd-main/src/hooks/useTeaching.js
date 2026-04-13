@@ -34,7 +34,8 @@ export async function streamText(fullText, onUpdate, options = {}) {
   })
 }
 
-export default function useTeaching(sessionId, editor) {
+export default function useTeaching(sessionId, editor, options = {}) {
+  const { voiceRate = 1.5 } = options
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [currentStep, setCurrentStep] = useState(null)
@@ -204,7 +205,7 @@ export default function useTeaching(sessionId, editor) {
     if (step.voice?.script) {
       try {
         setIsSpeaking(true)
-        await playSpeech(step.voice.script)
+        await playSpeech(step.voice.script, { playbackRate: voiceRate })
       } finally {
         setIsSpeaking(false)
       }

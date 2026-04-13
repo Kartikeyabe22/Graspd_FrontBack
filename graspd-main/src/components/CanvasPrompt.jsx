@@ -6,6 +6,7 @@ import styles from './CanvasPrompt.module.css'
 
 export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
   const [uploadStatus, setUploadStatus] = useState('idle')
+  const [voiceRate, setVoiceRate] = useState(1.5)
   const fileInputRef = useRef(null)
 
   const {
@@ -15,7 +16,7 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
     currentStep,
     startLearning,
     nextStep,
-  } = useTeaching(activeSessionId, editor)
+  } = useTeaching(activeSessionId, editor, { voiceRate })
 
   function handleUploadClick() {
     fileInputRef.current?.click()
@@ -109,6 +110,21 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
             <span className={styles.dots}><span /><span /><span /></span>
           ) : 'next'}
         </button>
+
+        <div className={styles.rateWrap}>
+          <span className={styles.rateLabel}>rate</span>
+          <input
+            className={styles.rateSlider}
+            type="range"
+            min="1"
+            max="2"
+            step="0.1"
+            value={voiceRate}
+            onChange={(e) => setVoiceRate(Number(e.target.value))}
+            aria-label="Speech rate"
+          />
+          <span className={styles.rateValue}>{voiceRate.toFixed(1)}x</span>
+        </div>
 
         <div className={styles.divider} />
         <button className={styles.tutorBtn} onClick={onOpenChat}>
