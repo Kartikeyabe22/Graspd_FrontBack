@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { toRichText } from '@tldraw/editor'
+import { createShapeId } from 'tldraw'
 import { playSpeech } from '../services/tts'
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -46,7 +47,7 @@ export default function useTeaching(sessionId, editor) {
     const ed = editorRef.current
     if (!ed || !step) return
 
-    const SLIDE_WIDTH = 800
+    const SLIDE_WIDTH = 1700
     const SLIDE_HEIGHT = 700
 
     const xStart = (window.innerWidth - SLIDE_WIDTH) / 2
@@ -113,6 +114,7 @@ export default function useTeaching(sessionId, editor) {
         size: 'xl',
         font: 'serif',
         w: 720,
+        autoSize: false,
       },
     })
 
@@ -133,7 +135,9 @@ export default function useTeaching(sessionId, editor) {
     })
 
     // 📄 Content
-    const contentShape = ed.createShape({
+    const contentShapeId = createShapeId()
+    ed.createShape({
+      id: contentShapeId,
       type: 'text',
       x: xStart + 40,
       y: yStart + 140,
@@ -143,6 +147,7 @@ export default function useTeaching(sessionId, editor) {
         size: 'l',
         font: 'sans',
         w: 720,
+        autoSize: false,
       },
     })
 
@@ -153,7 +158,7 @@ export default function useTeaching(sessionId, editor) {
         await streamText(content, (partial) => {
           ed.updateShapes([
             {
-              id: contentShape.id,
+              id: contentShapeId,
               props: { richText: toRichText(partial) },
             },
           ])
@@ -173,6 +178,7 @@ export default function useTeaching(sessionId, editor) {
             size: 'l',
             font: 'serif',
             w: 720,
+            autoSize: false,
           },
         })
 
@@ -186,6 +192,7 @@ export default function useTeaching(sessionId, editor) {
             size: 's',
             font: 'sans',
             w: 700,
+            autoSize: false,
           },
         })
       }
@@ -213,6 +220,7 @@ export default function useTeaching(sessionId, editor) {
         color: 'grey',
         size: 's',
         font: 'sans',
+        autoSize: false,
       },
     })
 

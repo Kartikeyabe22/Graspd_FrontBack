@@ -65,6 +65,8 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
 from fastapi.responses import StreamingResponse
+from gtts import gTTS
+from io import BytesIO
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import (
@@ -104,17 +106,29 @@ if elevenlabs_api_key:
 # -------------------- TTS FUNCTION --------------------
 def text_to_speech_stream(text: str):
     """Convert text to speech and return audio stream"""
-    if not elevenlabs_client:
-        return None
-    
+    # ElevenLabs (paid) - keep for quick switch back
+    # if not elevenlabs_client:
+    #     return None
+    #
+    # try:
+    #     audio = elevenlabs_client.text_to_speech.convert(
+    #         text=text,
+    #         voice_id="FE4QURxZUK1rVrVK3PlK",  # Your voice ID
+    #         model_id="eleven_v3",
+    #         output_format="mp3_44100_128",
+    #     )
+    #     return audio
+    # except Exception as e:
+    #     print(f"TTS Error: {e}")
+    #     return None
+
+    # gTTS (free)
     try:
-        audio = elevenlabs_client.text_to_speech.convert(
-            text=text,
-            voice_id="FE4QURxZUK1rVrVK3PlK",  # Your voice ID
-            model_id="eleven_v3",
-            output_format="mp3_44100_128",
-        )
-        return audio
+        tts = gTTS(text=text, lang="en")
+        buffer = BytesIO()
+        tts.write_to_fp(buffer)
+        buffer.seek(0)
+        return buffer
     except Exception as e:
         print(f"TTS Error: {e}")
         return None
@@ -160,7 +174,6 @@ def save_vectorstore(session_id: str, vectorstore_obj):
     if hasattr(vectorstore_obj, "persist"):
         vectorstore_obj.persist()
     vectorstores[session_id] = vectorstore_obj
-
 
 
 
@@ -680,9 +693,7 @@ def next_teaching_step(session_id: str, current_user: dict = Depends(get_current
 # -------------------- TTS API --------------------
 @app.post("/tts")
 async def generate_tts(tts_request: TTSRequest):
-    """Convert text to speech using ElevenLabs"""
-    if not elevenlabs_client:
-        raise HTTPException(500, "TTS service not configured")
+    """Convert text to speech using gTTS (fallback) or ElevenLabs"""
     
     text = tts_request.text.strip()
     if not text:
