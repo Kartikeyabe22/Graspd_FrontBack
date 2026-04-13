@@ -26,25 +26,29 @@ export const generateSpeech = async (text) => {
   }
 }
 
+export const playSpeechFromBlob = async (audioBlob, options = {}) => {
+  const { playbackRate = 1.5 } = options
+  const audioUrl = URL.createObjectURL(audioBlob)
+  const audio = new Audio(audioUrl)
+  audio.playbackRate = playbackRate
+
+  return new Promise((resolve, reject) => {
+    audio.onended = () => {
+      URL.revokeObjectURL(audioUrl)
+      resolve()
+    }
+    audio.onerror = (error) => {
+      URL.revokeObjectURL(audioUrl)
+      reject(error)
+    }
+    audio.play().catch(reject)
+  })
+}
+
 export const playSpeech = async (text, options = {}) => {
   try {
-    const { playbackRate = 1.5 } = options
     const audioBlob = await generateSpeech(text)
-    const audioUrl = URL.createObjectURL(audioBlob)
-    const audio = new Audio(audioUrl)
-    audio.playbackRate = playbackRate
-    
-    return new Promise((resolve, reject) => {
-      audio.onended = () => {
-        URL.revokeObjectURL(audioUrl)
-        resolve()
-      }
-      audio.onerror = (error) => {
-        URL.revokeObjectURL(audioUrl)
-        reject(error)
-      }
-      audio.play().catch(reject)
-    })
+    return await playSpeechFromBlob(audioBlob, options)
   } catch (error) {
     console.error('Play speech error:', error)
     throw error

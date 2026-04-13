@@ -1,17 +1,13 @@
 import { useState, useRef, useCallback } from 'react'
 import { toRichText } from '@tldraw/editor'
 import { createShapeId } from 'tldraw'
-import { playSpeech } from '../services/tts'
+import { generateSpeech, playSpeechFromBlob } from '../services/tts'
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function getAuthHeaders() {
   const token = localStorage.getItem('access_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 export async function streamText(fullText, onUpdate, options = {}) {
@@ -152,6 +148,10 @@ export default function useTeaching(sessionId, editor, options = {}) {
       },
     })
 
+    const speechPromise = step.voice?.script
+      ? generateSpeech(step.voice.script)
+      : null
+
     setIsStreaming(true)
 
     try {
@@ -166,7 +166,13 @@ export default function useTeaching(sessionId, editor, options = {}) {
         })
       }
 
-      await sleep(200)
+      if (speechPromise) {
+        setIsSpeaking(true)
+        speechPromise
+          .then((audioBlob) => playSpeechFromBlob(audioBlob, { playbackRate: voiceRate }))
+          .catch((err) => console.error('Play speech error:', err))
+          .finally(() => setIsSpeaking(false))
+      }
 
       if (points.length > 0) {
         ed.createShape({
@@ -199,16 +205,6 @@ export default function useTeaching(sessionId, editor, options = {}) {
       }
     } finally {
       setIsStreaming(false)
-    }
-
-    // 🔊 Voice
-    if (step.voice?.script) {
-      try {
-        setIsSpeaking(true)
-        await playSpeech(step.voice.script, { playbackRate: voiceRate })
-      } finally {
-        setIsSpeaking(false)
-      }
     }
 
     // 🎯 Slide number
