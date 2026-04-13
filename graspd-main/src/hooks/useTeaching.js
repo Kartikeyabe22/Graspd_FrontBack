@@ -209,20 +209,6 @@ export default function useTeaching(sessionId, editor, options = {}) {
       setIsStreaming(false)
     }
 
-    // 🎯 Slide number
-    ed.createShape({
-      type: 'text',
-      x: xStart + 700,
-      y: yStart + 20,
-      props: {
-        richText: toRichText(`Slide ${allShapes.length + 1}`),
-        color: 'grey',
-        size: 's',
-        font: 'sans',
-        autoSize: false,
-      },
-    })
-
     // 🎬 Smooth camera
     ed.setCamera(
       {
