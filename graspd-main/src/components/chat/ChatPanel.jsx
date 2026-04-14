@@ -27,6 +27,7 @@ export default function ChatPanel({ editor, open, onClose, activeSessionId }) {
 
   const bottomRef = useRef(null)
   const fileRef   = useRef(null)
+  const panelRef  = useRef(null)
 
   // ── Watch for session changes ──────────────────────────────────────────────
   useEffect(() => {
@@ -98,6 +99,22 @@ export default function ChatPanel({ editor, open, onClose, activeSessionId }) {
     if (!currentPageId || messages.length <= 1) return
     saveChatHistory(currentPageId, messages)
   }, [messages, currentPageId])
+
+  // ── Close on outside click ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!open) return
+
+    const handleOutsideClick = (event) => {
+      if (!panelRef.current) return
+      if (panelRef.current.contains(event.target)) return
+      onClose()
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick)
+    }
+  }, [open, onClose])
 
   // ── File handling ────────────────────────────────────────────────────────
   function handleFileChange(e) {
@@ -234,6 +251,9 @@ export default function ChatPanel({ editor, open, onClose, activeSessionId }) {
   return (
     <div
       className={styles.panel}
+      ref={panelRef}
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
       onDragOver={e => e.preventDefault()}
       onDrop={handleDrop}
     >

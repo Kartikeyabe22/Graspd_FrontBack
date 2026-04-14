@@ -127,7 +127,13 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
         </div>
 
         <div className={styles.divider} />
-        <button className={styles.tutorBtn} onClick={onOpenChat}>
+        <button
+          className={styles.tutorBtn}
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenChat()
+          }}
+        >
           <span className={styles.tutorDot} />
           ask tutor
         </button>
