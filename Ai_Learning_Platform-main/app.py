@@ -51,13 +51,12 @@ st.title("Graspd")
 api_key = os.getenv("GROQ_API_KEY")
 
 # persistence config
-DB_PATH = "chat_sessions.db"
 VECTORSTORE_ROOT = "chroma_sessions"
 
 os.makedirs(VECTORSTORE_ROOT, exist_ok=True)
 
 # Initialize database
-db_conn = init_db()
+init_db()
 
 
 # Initialize session stores

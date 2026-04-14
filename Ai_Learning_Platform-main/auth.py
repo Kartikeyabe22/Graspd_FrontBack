@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from pydantic import BaseModel
-import sqlite3
+from psycopg2.extras import RealDictCursor
 
 from database import get_all_users, get_db_conn
 
@@ -49,26 +49,33 @@ def create_access_token(user_id: int, username: str):
 
 
 def get_user_by_username(conn, username: str):
-    conn.row_factory = sqlite3.Row  # 🔥 ensures dict-like access
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE username = ?", (username,))
-    return cur.fetchone()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+        return cur.fetchone()
+    finally:
+        cur.close()
 
 
 def create_user(conn, username: str, password: str):
     cur = conn.cursor()
+    try:
+        existing_user = get_user_by_username(conn, username)
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already taken")
 
-    existing_user = get_user_by_username(conn, username)
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already taken")
+        hashed_password = hash_password(password)
 
-    hashed_password = hash_password(password)
-
-    cur.execute(
-        "INSERT INTO users (username, hashed_password, created_at) VALUES (?, ?, ?)",
-        (username, hashed_password, datetime.utcnow().isoformat())
-    )
-    conn.commit()
+        cur.execute(
+            "INSERT INTO users (username, hashed_password, created_at) VALUES (%s, %s, %s)",
+            (username, hashed_password, datetime.utcnow().isoformat())
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
 
 
 def authenticate_user(conn, username: str, password: str):

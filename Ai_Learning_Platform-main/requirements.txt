@@ -44,3 +44,5 @@ python-jose[cryptography]==3.3.0
 # ---------- TTS ----------
 elevenlabs
 gtts
+# ---------- Postgres ----------
+psycopg2-binary
