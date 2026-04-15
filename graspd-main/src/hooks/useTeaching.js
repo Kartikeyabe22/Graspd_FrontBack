@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { toRichText } from '@tldraw/editor'
 import { createShapeId } from 'tldraw'
-import { generateSpeech, playSpeechFromBlob } from '../services/tts'
+import { generateSpeech, createSpeechPlayer } from '../services/tts'
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -10,24 +10,45 @@ function getAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-export async function streamText(fullText, onUpdate, options = {}) {
+export function streamText(fullText, onUpdate, options = {}) {
   const { intervalMs = 40 } = options
   let currentValue = ''
+  let i = 0
+  let paused = false
+  let stopped = false
+  let resolveDone
 
-  return new Promise((resolve) => {
-    let i = 0
-    const timer = setInterval(() => {
-      if (i >= fullText.length) {
-        clearInterval(timer)
-        onUpdate(fullText)
-        resolve()
-        return
-      }
-      currentValue += fullText[i]
-      onUpdate(currentValue)
-      i++
-    }, intervalMs)
+  const done = new Promise((resolve) => {
+    resolveDone = resolve
   })
+
+  const timer = setInterval(() => {
+    if (stopped || paused) return
+    if (i >= fullText.length) {
+      clearInterval(timer)
+      onUpdate(fullText)
+      resolveDone()
+      return
+    }
+    currentValue += fullText[i]
+    onUpdate(currentValue)
+    i++
+  }, intervalMs)
+
+  return {
+    pause: () => {
+      paused = true
+    },
+    resume: () => {
+      paused = false
+    },
+    stop: () => {
+      stopped = true
+      clearInterval(timer)
+      resolveDone()
+    },
+    done,
+  }
 }
 
 export default function useTeaching(sessionId, editor, options = {}) {
@@ -36,9 +57,18 @@ export default function useTeaching(sessionId, editor, options = {}) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [currentStep, setCurrentStep] = useState(null)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
 
   const editorRef = useRef(editor)
   editorRef.current = editor
+  const textStreamRef = useRef(null)
+  const audioPlayerRef = useRef(null)
+  const isPausedRef = useRef(false)
+
+  const setPausedState = (value) => {
+    isPausedRef.current = value
+    setIsPaused(value)
+  }
 
   const createShapesForStep = async (step) => {
     const ed = editorRef.current
@@ -155,16 +185,39 @@ export default function useTeaching(sessionId, editor, options = {}) {
     if (speechPromise) {
       setIsSpeaking(true)
       speechPromise
-        .then((audioBlob) => playSpeechFromBlob(audioBlob, { playbackRate: voiceRate }))
-        .catch((err) => console.error('Play speech error:', err))
-        .finally(() => setIsSpeaking(false))
+        .then((audioBlob) => {
+          if (!audioBlob) return
+          const player = createSpeechPlayer(audioBlob, { playbackRate: voiceRate })
+          audioPlayerRef.current = player
+
+          player.audio.onended = () => {
+            player.cleanup()
+            audioPlayerRef.current = null
+            setIsSpeaking(false)
+          }
+
+          player.audio.onerror = (err) => {
+            player.cleanup()
+            audioPlayerRef.current = null
+            setIsSpeaking(false)
+            console.error('Play speech error:', err)
+          }
+
+          if (!isPausedRef.current) {
+            player.play().catch((err) => console.error('Play speech error:', err))
+          }
+        })
+        .catch((err) => {
+          console.error('Play speech error:', err)
+          setIsSpeaking(false)
+        })
     }
 
     setIsStreaming(true)
 
     try {
       if (content) {
-        await streamText(content, (partial) => {
+        const streamController = streamText(content, (partial) => {
           ed.updateShapes([
             {
               id: contentShapeId,
@@ -172,6 +225,9 @@ export default function useTeaching(sessionId, editor, options = {}) {
             },
           ])
         })
+        textStreamRef.current = streamController
+        await streamController.done
+        textStreamRef.current = null
       }
 
       // Voice playback already kicked off in parallel with typing.
@@ -244,6 +300,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
 
   const startLearning = useCallback(async () => {
     if (isStreaming) return
+    setPausedState(false)
 
     const payload = await fetchStep('teach/start')
 
@@ -255,6 +312,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
 
   const nextStep = useCallback(async () => {
     if (isStreaming) return
+    setPausedState(false)
 
     const payload = await fetchStep('teach/next')
 
@@ -273,8 +331,23 @@ export default function useTeaching(sessionId, editor, options = {}) {
     isLoading,
     isStreaming,
     isSpeaking,
+    isPaused,
     currentStep,
     startLearning,
     nextStep,
+    togglePause: () => {
+      const nextPaused = !isPausedRef.current
+      setPausedState(nextPaused)
+      if (nextPaused) {
+        textStreamRef.current?.pause()
+        audioPlayerRef.current?.pause()
+        return
+      }
+
+      textStreamRef.current?.resume()
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.play().catch((err) => console.error('Play speech error:', err))
+      }
+    },
   }
 }

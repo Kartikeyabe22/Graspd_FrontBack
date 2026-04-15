@@ -45,6 +45,29 @@ export const playSpeechFromBlob = async (audioBlob, options = {}) => {
   })
 }
 
+export const createSpeechPlayer = (audioBlob, options = {}) => {
+  const { playbackRate = 1.5 } = options
+  const audioUrl = URL.createObjectURL(audioBlob)
+  const audio = new Audio(audioUrl)
+  audio.playbackRate = playbackRate
+
+  const cleanup = () => {
+    URL.revokeObjectURL(audioUrl)
+  }
+
+  return {
+    audio,
+    play: () => audio.play(),
+    pause: () => audio.pause(),
+    stop: () => {
+      audio.pause()
+      audio.currentTime = 0
+      cleanup()
+    },
+    cleanup,
+  }
+}
+
 export const playSpeech = async (text, options = {}) => {
   try {
     const audioBlob = await generateSpeech(text)

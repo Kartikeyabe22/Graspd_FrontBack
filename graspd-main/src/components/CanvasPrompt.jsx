@@ -13,9 +13,11 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
     isLoading: teachingLoading,
     isStreaming,
     isSpeaking,
+    isPaused,
     currentStep,
     startLearning,
     nextStep,
+    togglePause,
   } = useTeaching(activeSessionId, editor, { voiceRate })
 
   function handleUploadClick() {
@@ -88,6 +90,15 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
         </button>
 
         <button
+          className={`${styles.btn} ${isPaused ? styles.loading : ''}`}
+          onClick={() => togglePause()}
+          disabled={!isStreaming && !isSpeaking}
+          title={isPaused ? 'Resume learning' : 'Pause learning'}
+        >
+          {isPaused ? 'Resume' : 'Pause'}
+        </button>
+
+        <button
           className={`${styles.btn} ${uploadStatus === 'loading' ? styles.loading : ''}`}
           onClick={handleUploadClick}
           disabled={uploadStatus === 'loading'}
@@ -143,6 +154,7 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
           Teaching: {currentStep.topic} (PDF {currentStep.pdf_index + 1}, step {currentStep.step})
           {isStreaming ? ' — typing...' : ''}
           {isSpeaking ? ' 🔊 speaking...' : ''}
+          {isPaused ? ' — paused' : ''}
         </div>
       )}
     </div>
