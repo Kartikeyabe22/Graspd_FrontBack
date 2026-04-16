@@ -16,8 +16,8 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
     isPaused,
     currentStep,
     startLearning,
-    nextStep,
     togglePause,
+    isAutoTeaching,
   } = useTeaching(activeSessionId, editor, { voiceRate })
 
   function handleUploadClick() {
@@ -81,7 +81,7 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
         <button
           className={`${styles.btn} ${teachingLoading ? styles.loading : ''}`}
           onClick={() => startLearning().catch(err => console.error(err))}
-          disabled={!activeSessionId || teachingLoading || isStreaming}
+          disabled={!activeSessionId || teachingLoading || isStreaming || isAutoTeaching}
           title="Start teaching from PDFs"
         >
           {(teachingLoading && !currentStep) ? (
@@ -109,17 +109,6 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
               <span /><span /><span />
             </span>
           ) : uploadStatus === 'error' ? 'retry' : 'upload'}
-        </button>
-
-        <button
-          className={`${styles.btn} ${teachingLoading ? styles.loading : ''}`}
-          onClick={() => nextStep().catch(err => console.error(err))}
-          disabled={!activeSessionId || teachingLoading || isStreaming}
-          title="Next topic step"
-        >
-          {teachingLoading ? (
-            <span className={styles.dots}><span /><span /><span /></span>
-          ) : 'next'}
         </button>
 
         <div className={styles.rateWrap}>

@@ -58,21 +58,56 @@ export default function useTeaching(sessionId, editor, options = {}) {
   const [currentStep, setCurrentStep] = useState(null)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
+  const [isAutoTeaching, setIsAutoTeaching] = useState(false)
 
   const editorRef = useRef(editor)
   editorRef.current = editor
   const textStreamRef = useRef(null)
   const audioPlayerRef = useRef(null)
   const isPausedRef = useRef(false)
+  const pauseWaitersRef = useRef([])
+  const isAutoTeachingRef = useRef(false)
+  const ttsCacheRef = useRef(new Map())
 
   const setPausedState = (value) => {
     isPausedRef.current = value
     setIsPaused(value)
+    if (!value && pauseWaitersRef.current.length) {
+      const waiters = pauseWaitersRef.current
+      pauseWaitersRef.current = []
+      waiters.forEach((resume) => resume())
+    }
   }
+
+  const waitForResume = () => {
+    if (!isPausedRef.current) return Promise.resolve()
+    return new Promise((resolve) => {
+      pauseWaitersRef.current.push(resolve)
+    })
+  }
+
+  const getSpeechPromise = useCallback((script) => {
+    if (!script) return null
+    const cache = ttsCacheRef.current
+    if (cache.has(script)) return cache.get(script)
+
+    const speechPromise = generateSpeech(script)
+      .catch((err) => {
+        cache.delete(script)
+        throw err
+      })
+
+    cache.set(script, speechPromise)
+    return speechPromise
+  }, [])
 
   const createShapesForStep = async (step) => {
     const ed = editorRef.current
     if (!ed || !step) return
+
+    const speechPromise = step.voice?.script
+      ? getSpeechPromise(step.voice.script)
+      : null
 
     const SLIDE_WIDTH = 1700
     const SLIDE_HEIGHT = 700
@@ -162,14 +197,12 @@ export default function useTeaching(sessionId, editor, options = {}) {
     })
 
     // 📄 Content
-    const contentShapeId = createShapeId()
     ed.createShape({
-      id: contentShapeId,
       type: 'text',
       x: xStart + 40,
       y: yStart + 140,
       props: {
-        richText: toRichText(''),
+        richText: toRichText(content),
           color: 'white',
         size: 'l',
         font: 'sans',
@@ -178,34 +211,40 @@ export default function useTeaching(sessionId, editor, options = {}) {
       },
     })
 
-    const speechPromise = step.voice?.script
-      ? generateSpeech(step.voice.script)
-      : null
+    let speechDone = Promise.resolve()
 
     if (speechPromise) {
       setIsSpeaking(true)
-      speechPromise
+      speechDone = speechPromise
         .then((audioBlob) => {
           if (!audioBlob) return
-          const player = createSpeechPlayer(audioBlob, { playbackRate: voiceRate })
-          audioPlayerRef.current = player
 
-          player.audio.onended = () => {
-            player.cleanup()
-            audioPlayerRef.current = null
-            setIsSpeaking(false)
-          }
+          return new Promise((resolve) => {
+            const player = createSpeechPlayer(audioBlob, { playbackRate: voiceRate })
+            audioPlayerRef.current = player
 
-          player.audio.onerror = (err) => {
-            player.cleanup()
-            audioPlayerRef.current = null
-            setIsSpeaking(false)
-            console.error('Play speech error:', err)
-          }
+            player.audio.onended = () => {
+              player.cleanup()
+              audioPlayerRef.current = null
+              setIsSpeaking(false)
+              resolve()
+            }
 
-          if (!isPausedRef.current) {
-            player.play().catch((err) => console.error('Play speech error:', err))
-          }
+            player.audio.onerror = (err) => {
+              player.cleanup()
+              audioPlayerRef.current = null
+              setIsSpeaking(false)
+              console.error('Play speech error:', err)
+              resolve()
+            }
+
+            if (!isPausedRef.current) {
+              player.play().catch((err) => {
+                console.error('Play speech error:', err)
+                resolve()
+              })
+            }
+          })
         })
         .catch((err) => {
           console.error('Play speech error:', err)
@@ -214,55 +253,40 @@ export default function useTeaching(sessionId, editor, options = {}) {
     }
 
     setIsStreaming(true)
+    Promise.resolve(speechDone).finally(() => setIsStreaming(false))
 
-    try {
-      if (content) {
-        const streamController = streamText(content, (partial) => {
-          ed.updateShapes([
-            {
-              id: contentShapeId,
-              props: { richText: toRichText(partial) },
-            },
-          ])
-        })
-        textStreamRef.current = streamController
-        await streamController.done
-        textStreamRef.current = null
-      }
+    textStreamRef.current = null
 
-      // Voice playback already kicked off in parallel with typing.
+    // Voice playback already kicked off in parallel with typing.
 
-      if (points.length > 0) {
-        ed.createShape({
-          type: 'text',
-          x: xStart + 40,
-          y: yStart + 320,
-          props: {
-            richText: toRichText('Key Points'),
-              color: 'white',
-            size: 'l',
-            font: 'serif',
-            w: 720,
-            autoSize: false,
-          },
-        })
+    if (points.length > 0) {
+      ed.createShape({
+        type: 'text',
+        x: xStart + 40,
+        y: yStart + 320,
+        props: {
+          richText: toRichText('Key Points'),
+            color: 'white',
+          size: 'l',
+          font: 'serif',
+          w: 720,
+          autoSize: false,
+        },
+      })
 
-        ed.createShape({
-          type: 'text',
-          x: xStart + 50,
-          y: yStart + 360,
-          props: {
-            richText: toRichText(points.map(p => `• ${p}`).join('\n')),
-              color: 'white',
-            size: 's',
-            font: 'sans',
-            w: 700,
-            autoSize: false,
-          },
-        })
-      }
-    } finally {
-      setIsStreaming(false)
+      ed.createShape({
+        type: 'text',
+        x: xStart + 50,
+        y: yStart + 360,
+        props: {
+          richText: toRichText(points.map(p => `• ${p}`).join('\n')),
+            color: 'white',
+          size: 's',
+          font: 'sans',
+          w: 700,
+          autoSize: false,
+        },
+      })
     }
 
     // 🎬 Smooth camera
@@ -274,6 +298,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       },
       { animation: { duration: 500 } }
     )
+    return speechDone
   }
 
   const fetchStep = useCallback(async (path) => {
@@ -299,14 +324,80 @@ export default function useTeaching(sessionId, editor, options = {}) {
   }, [sessionId])
 
   const startLearning = useCallback(async () => {
-    if (isStreaming) return
+    if (isStreaming || isAutoTeachingRef.current) return
     setPausedState(false)
+    setIsAutoTeaching(true)
+    isAutoTeachingRef.current = true
 
-    const payload = await fetchStep('teach/start')
+    try {
+      const payload = await fetchStep('teach/start')
 
-    if (payload?.canvas) {
-      setCurrentStep(payload)
-      await createShapesForStep(payload)
+      if (payload?.canvas) {
+        setCurrentStep(payload)
+        const speechDone = createShapesForStep(payload)
+        const nextPayloadPromise = fetchStep('teach/next').then((nextPayload) => {
+          if (nextPayload?.voice?.script) {
+            getSpeechPromise(nextPayload.voice.script)
+          }
+          return nextPayload
+        })
+
+        await speechDone
+        await waitForResume()
+        let nextPayload = await nextPayloadPromise
+
+        while (true) {
+          if (nextPayload.message === 'Teaching completed') {
+            setCurrentStep(null)
+            break
+          }
+
+          if (nextPayload?.canvas) {
+            setCurrentStep(nextPayload)
+            const nextSpeechDone = createShapesForStep(nextPayload)
+            const upcomingPayloadPromise = fetchStep('teach/next').then((upcomingPayload) => {
+              if (upcomingPayload?.voice?.script) {
+                getSpeechPromise(upcomingPayload.voice.script)
+              }
+              return upcomingPayload
+            })
+
+            await nextSpeechDone
+            await waitForResume()
+            nextPayload = await upcomingPayloadPromise
+            continue
+          }
+
+          break
+        }
+
+        return
+      }
+
+      while (true) {
+        await waitForResume()
+        const nextPayload = await fetchStep('teach/next')
+
+        if (nextPayload.message === 'Teaching completed') {
+          setCurrentStep(null)
+          break
+        }
+
+        if (nextPayload?.canvas) {
+          setCurrentStep(nextPayload)
+          const speechDone = createShapesForStep(nextPayload)
+          if (nextPayload?.voice?.script) {
+            getSpeechPromise(nextPayload.voice.script)
+          }
+          await speechDone
+          continue
+        }
+
+        break
+      }
+    } finally {
+      setIsAutoTeaching(false)
+      isAutoTeachingRef.current = false
     }
   }, [fetchStep, isStreaming])
 
@@ -323,7 +414,8 @@ export default function useTeaching(sessionId, editor, options = {}) {
 
     if (payload?.canvas) {
       setCurrentStep(payload)
-      await createShapesForStep(payload)
+      const speechDone = createShapesForStep(payload)
+      await speechDone
     }
   }, [fetchStep, isStreaming])
 
@@ -349,5 +441,6 @@ export default function useTeaching(sessionId, editor, options = {}) {
         audioPlayerRef.current.play().catch((err) => console.error('Play speech error:', err))
       }
     },
+    isAutoTeaching,
   }
 }
