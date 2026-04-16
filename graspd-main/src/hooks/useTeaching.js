@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import { toRichText } from '@tldraw/editor'
+import { Box, toRichText } from '@tldraw/editor'
 import { createShapeId } from 'tldraw'
 import { generateSpeech, createSpeechPlayer } from '../services/tts'
 
@@ -68,6 +68,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
   const pauseWaitersRef = useRef([])
   const isAutoTeachingRef = useRef(false)
   const ttsCacheRef = useRef(new Map())
+  const slideShapeIdsRef = useRef([])
 
   const setPausedState = (value) => {
     isPausedRef.current = value
@@ -101,9 +102,38 @@ export default function useTeaching(sessionId, editor, options = {}) {
     return speechPromise
   }, [])
 
+  const clearSlideShapes = (ed) => {
+    if (!slideShapeIdsRef.current.length) return
+    ed.deleteShapes(slideShapeIdsRef.current)
+    slideShapeIdsRef.current = []
+  }
+
+  const getSlideBounds = (ed) => {
+    if (!slideShapeIdsRef.current.length) return null
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    slideShapeIdsRef.current.forEach((id) => {
+      const bounds = ed.getShapePageBounds(id)
+      if (!bounds) return
+      minX = Math.min(minX, bounds.x)
+      minY = Math.min(minY, bounds.y)
+      maxX = Math.max(maxX, bounds.x + bounds.w)
+      maxY = Math.max(maxY, bounds.y + bounds.h)
+    })
+
+    if (!Number.isFinite(minX)) return null
+    return new Box(minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY))
+  }
+
   const createShapesForStep = async (step) => {
     const ed = editorRef.current
     if (!ed || !step) return
+
+    clearSlideShapes(ed)
 
     const speechPromise = step.voice?.script
       ? getSpeechPromise(step.voice.script)
@@ -113,28 +143,16 @@ export default function useTeaching(sessionId, editor, options = {}) {
     const SLIDE_HEIGHT = 700
 
     const xStart = (window.innerWidth - SLIDE_WIDTH) / 2
-
-    // ✅ REAL POSITION CALCULATION (NO OVERLAP)
-    const allShapes = ed.getCurrentPageShapes()
-
-    let yStart = 100
-    if (allShapes.length > 0) {
-      let maxY = 0
-      allShapes.forEach((shape) => {
-        const bounds = ed.getShapePageBounds(shape.id)
-        if (bounds) {
-          const bottom = bounds.y + bounds.h
-          if (bottom > maxY) maxY = bottom
-        }
-      })
-      yStart = maxY + 120
-    }
+    const yStart = 100
 
     const content = step.canvas.content || ''
     const points = step.canvas.important_points || []
 
     // 🟫 Subtle border (Gamma feel)
+    const borderId = createShapeId()
+    slideShapeIdsRef.current.push(borderId)
     ed.createShape({
+      id: borderId,
       type: 'geo',
       x: xStart - 1,
       y: yStart - 1,
@@ -150,7 +168,10 @@ export default function useTeaching(sessionId, editor, options = {}) {
     })
 
     // ⬛ Main slide
+    const slideId = createShapeId()
+    slideShapeIdsRef.current.push(slideId)
     ed.createShape({
+      id: slideId,
       type: 'geo',
       x: xStart,
       y: yStart,
@@ -166,7 +187,10 @@ export default function useTeaching(sessionId, editor, options = {}) {
     })
 
     // 🧠 Title
+    const titleId = createShapeId()
+    slideShapeIdsRef.current.push(titleId)
     ed.createShape({
+      id: titleId,
       type: 'text',
       x: xStart + 40,
       y: yStart + 50,
@@ -181,7 +205,10 @@ export default function useTeaching(sessionId, editor, options = {}) {
     })
 
     // ➖ Divider
+    const dividerId = createShapeId()
+    slideShapeIdsRef.current.push(dividerId)
     ed.createShape({
+      id: dividerId,
       type: 'geo',
       x: xStart + 40,
       y: yStart + 100,
@@ -197,7 +224,10 @@ export default function useTeaching(sessionId, editor, options = {}) {
     })
 
     // 📄 Content
+    const contentId = createShapeId()
+    slideShapeIdsRef.current.push(contentId)
     ed.createShape({
+      id: contentId,
       type: 'text',
       x: xStart + 40,
       y: yStart + 140,
@@ -260,7 +290,10 @@ export default function useTeaching(sessionId, editor, options = {}) {
     // Voice playback already kicked off in parallel with typing.
 
     if (points.length > 0) {
+      const keyTitleId = createShapeId()
+      slideShapeIdsRef.current.push(keyTitleId)
       ed.createShape({
+        id: keyTitleId,
         type: 'text',
         x: xStart + 40,
         y: yStart + 320,
@@ -274,7 +307,10 @@ export default function useTeaching(sessionId, editor, options = {}) {
         },
       })
 
+      const keyPointsId = createShapeId()
+      slideShapeIdsRef.current.push(keyPointsId)
       ed.createShape({
+        id: keyPointsId,
         type: 'text',
         x: xStart + 50,
         y: yStart + 360,
@@ -289,15 +325,11 @@ export default function useTeaching(sessionId, editor, options = {}) {
       })
     }
 
-    // 🎬 Smooth camera
-    ed.setCamera(
-      {
-        x: 0,
-        y: yStart - 200,
-        z: 1,
-      },
-      { animation: { duration: 500 } }
-    )
+    // 🎬 Subtle transition to a full slide view
+    const slideBounds = getSlideBounds(ed)
+    if (slideBounds) {
+      ed.zoomToBounds(slideBounds, { animation: { duration: 300 } })
+    }
     return speechDone
   }
 
