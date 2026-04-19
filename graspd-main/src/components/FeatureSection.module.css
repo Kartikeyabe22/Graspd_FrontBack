@@ -42,3 +42,32 @@ h2 em { font-style: normal; }
 }
 .btitle { font-size: 13px; font-weight: 500; margin-bottom: 4px; letter-spacing: -.01em; }
 .bdesc  { font-size: 12px; color: var(--t3); line-height: 1.65; font-weight: 300; }
+
+@media (max-width: 1080px) {
+  .fsec {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 72px 24px;
+  }
+
+  .flip .copy,
+  .flip .demo {
+    order: initial;
+  }
+
+  .desc {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .fsec {
+    padding: 56px 16px;
+    gap: 22px;
+  }
+
+  .bullet {
+    gap: 12px;
+    padding: 14px 0;
+  }
+}

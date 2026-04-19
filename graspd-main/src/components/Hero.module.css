@@ -35,3 +35,32 @@ h1 {
   cursor: pointer; font-family: var(--f); transition: all .2s;
 }
 .outline:hover { color: var(--t); border-color: var(--b3); }
+
+@media (max-width: 1080px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 72px 24px 64px;
+  }
+
+  .sub {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    padding: 56px 16px 52px;
+  }
+
+  .btns {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .main,
+  .outline {
+    width: 100%;
+    text-align: center;
+  }
+}

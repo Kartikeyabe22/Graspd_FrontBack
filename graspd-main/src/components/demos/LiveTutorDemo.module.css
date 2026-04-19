@@ -1,6 +1,26 @@
 .split {
-  display: flex; height: 360px;
+  display: flex;
+  height: clamp(280px, 42vw, 360px);
   background: var(--s1); overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  .split {
+    flex-direction: column;
+    height: auto;
+    min-height: 420px;
+  }
+
+  .left,
+  .right {
+    width: 100%;
+  }
+
+  .left {
+    min-height: 220px;
+    border-right: none;
+    border-bottom: 1px solid var(--b1);
+  }
 }
 
 /* LEFT */

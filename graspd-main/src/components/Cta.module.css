@@ -22,3 +22,24 @@ p { font-size: 15px; color: var(--t3); font-weight: 300; line-height: 1.78; marg
   font-family: var(--f); white-space: nowrap; transition: background .15s;
 }
 .btn:hover { background: #d0d0d0; }
+
+@media (max-width: 900px) {
+  .inner {
+    padding: 72px 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .inner {
+    padding: 56px 16px;
+  }
+
+  .row {
+    max-width: 100%;
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}

@@ -139,11 +139,18 @@ export default function useTeaching(sessionId, editor, options = {}) {
       ? getSpeechPromise(step.voice.script)
       : null
 
-    const SLIDE_WIDTH = 1700
-    const SLIDE_HEIGHT = 700
+    const viewportBounds = typeof ed.getViewportScreenBounds === 'function'
+      ? ed.getViewportScreenBounds()
+      : null
+    const viewportWidth = Math.max(768, Math.round(viewportBounds?.w || window.innerWidth || 1280))
+    const viewportHeight = Math.max(520, Math.round(viewportBounds?.h || window.innerHeight || 720))
 
-    const xStart = (window.innerWidth - SLIDE_WIDTH) / 2
-    const yStart = 100
+    const SLIDE_WIDTH = Math.round(Math.min(viewportWidth * 0.92, 1500))
+    const SLIDE_HEIGHT = Math.round(Math.min(viewportHeight * 0.82, 900))
+    const TEXT_WIDTH = Math.max(420, Math.round(SLIDE_WIDTH * 0.42))
+
+    const xStart = 0
+    const yStart = 0
 
     const content = step.canvas.content || ''
     const points = step.canvas.important_points || []
@@ -199,7 +206,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
           color: 'white',
         size: 'xl',
         font: 'serif',
-        w: 720,
+        w: TEXT_WIDTH,
         autoSize: false,
       },
     })
@@ -214,7 +221,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       y: yStart + 100,
       props: {
         geo: 'rectangle',
-        w: 200,
+        w: Math.round(SLIDE_WIDTH * 0.12),
         h: 2,
         fill: 'solid',
         color: 'grey',
@@ -236,7 +243,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
           color: 'white',
         size: 'l',
         font: 'sans',
-        w: 720,
+        w: TEXT_WIDTH,
         autoSize: false,
       },
     })
@@ -296,13 +303,13 @@ export default function useTeaching(sessionId, editor, options = {}) {
         id: keyTitleId,
         type: 'text',
         x: xStart + 40,
-        y: yStart + 320,
+        y: yStart + Math.round(SLIDE_HEIGHT * 0.52),
         props: {
           richText: toRichText('Key Points'),
             color: 'white',
           size: 'l',
           font: 'serif',
-          w: 720,
+          w: TEXT_WIDTH,
           autoSize: false,
         },
       })
@@ -313,13 +320,13 @@ export default function useTeaching(sessionId, editor, options = {}) {
         id: keyPointsId,
         type: 'text',
         x: xStart + 50,
-        y: yStart + 360,
+        y: yStart + Math.round(SLIDE_HEIGHT * 0.58),
         props: {
           richText: toRichText(points.map(p => `• ${p}`).join('\n')),
             color: 'white',
           size: 's',
           font: 'sans',
-          w: 700,
+          w: Math.max(480, TEXT_WIDTH - 20),
           autoSize: false,
         },
       })
@@ -329,6 +336,16 @@ export default function useTeaching(sessionId, editor, options = {}) {
     const slideBounds = getSlideBounds(ed)
     if (slideBounds) {
       ed.zoomToBounds(slideBounds, { animation: { duration: 300 } })
+      requestAnimationFrame(() => {
+        if (typeof ed.getZoomLevel === 'function' && typeof ed.getCamera === 'function' && typeof ed.setCamera === 'function') {
+          const zoom = ed.getZoomLevel()
+          const camera = ed.getCamera()
+          ed.setCamera(
+            { x: camera.x, y: camera.y, z: Math.max(0.1, zoom * 0.9) },
+            { animation: { duration: 200 } }
+          )
+        }
+      })
     }
     return speechDone
   }

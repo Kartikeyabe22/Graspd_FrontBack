@@ -5,7 +5,7 @@
   left: 0;
   bottom: 0;
   background: #080808;
-  padding: 16px 0 12px 0;
+  padding: 10px 0 8px 0;
   display: flex;
   justify-content: center;
   z-index: 2;
@@ -15,9 +15,9 @@
   color: white;
   border: none;
   border-radius: 6px;
-  padding: 10px 32px;
+  padding: 8px clamp(12px, 3vw, 22px);
   font-weight: 600;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(34,197,94,0.15);
   transition: background 0.15s;
@@ -29,8 +29,8 @@
   position: fixed;
   top: 0;
   left: 0;
-  height: 100vh;
-  width: 220px;
+  height: 100dvh;
+  width: var(--sidebar-width, 220px);
   background: #080808;
   border-right: 1px solid #111;
   display: flex;
@@ -39,20 +39,20 @@
   transition: width .2s cubic-bezier(.16,1,.3,1);
   box-sizing: border-box;
 }
-.collapsed { width: 40px; }
+.collapsed { width: var(--sidebar-width-collapsed, 40px); }
 
 /* Header */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 12px 12px;
+  padding: 12px 8px 10px;
   border-bottom: 1px solid #111;
   flex-shrink: 0;
-  min-height: 54px;
+  min-height: 46px;
 }
 .title {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -60,7 +60,7 @@
   font-family: 'Inter', sans-serif;
 }
 .collapseBtn {
-  font-size: 16px;
+  font-size: 14px;
   color: #333;
   background: transparent;
   border: none;
@@ -77,19 +77,19 @@
 .newBtn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 10px 10px 6px;
-  padding: 8px 10px;
+  gap: 6px;
+  margin: 8px 8px 6px;
+  padding: 7px 8px;
   background: #0d0d0d;
   border: 1px solid #1a1a1a;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 11px;
   color: #555;
   cursor: pointer;
   font-family: 'Inter', sans-serif;
   letter-spacing: -.01em;
   transition: all .15s;
-  width: calc(100% - 20px);
+  width: calc(100% - 16px);
 }
 .newBtn:hover {
   color: #aaa;
@@ -97,7 +97,7 @@
   background: #111;
 }
 .newIcon {
-  font-size: 14px;
+  font-size: 12px;
   color: rgba(74,222,128,.5);
   line-height: 1;
 }
@@ -106,7 +106,7 @@
 .list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 8px 16px;
+  padding: 4px 6px 12px;
   scrollbar-width: thin;
   scrollbar-color: #181818 transparent;
 }
@@ -116,21 +116,33 @@
 /* Groups */
 .group { margin-bottom: 16px; }
 .groupLabel {
-  font-size: 9.5px;
+  font-size: 8.5px;
   letter-spacing: .1em;
   text-transform: uppercase;
   color: #252525;
   font-family: 'Inter', sans-serif;
   font-weight: 600;
-  padding: 0 10px 6px;
+  padding: 0 8px 4px;
 }
 
 /* Empty state */
 .empty {
-  font-size: 11.5px;
+  font-size: 10.5px;
   color: #2a2a2a;
   font-family: 'Inter', sans-serif;
-  line-height: 1.7;
-  padding: 20px 10px;
+  line-height: 1.5;
+  padding: 14px 8px;
   text-align: center;
+}
+
+@media (max-width: 900px) {
+  .header {
+    padding: 12px 10px 10px;
+  }
+
+  .newBtn {
+    margin: 8px 8px 6px;
+    width: calc(100% - 16px);
+    padding: 8px;
+  }
 }

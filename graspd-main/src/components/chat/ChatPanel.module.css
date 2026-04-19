@@ -1,11 +1,11 @@
 /* Panel */
 .panel {
   position: fixed;
-  bottom: 80px;
-  right: 24px;
+  bottom: clamp(64px, 9vh, 80px);
+  right: clamp(8px, 2vw, 24px);
   z-index: 500;
-  width: 380px;
-  height: 540px;
+  width: min(380px, calc(100vw - 24px));
+  height: min(540px, calc(100dvh - 116px));
   background: #080808;
   border: 1px solid #1a1a1a;
   border-radius: 16px;
@@ -239,3 +239,22 @@
   line-height: 1;
 }
 .uploadBtn:hover { color: #888; border-color: #252525; }
+
+@media (max-width: 900px) {
+  .panel {
+    right: 6px;
+    bottom: 8px;
+    width: calc(100vw - 12px);
+    height: calc(100dvh - 16px);
+    border-radius: 12px;
+  }
+
+  .messages {
+    padding: 12px 10px;
+    gap: 10px;
+  }
+
+  .inputArea {
+    padding: 8px 10px 10px;
+  }
+}

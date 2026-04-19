@@ -24,7 +24,8 @@
 
 /* canvas */
 .canvas {
-  position: relative; height: 340px;
+  position: relative;
+  height: clamp(290px, 42vw, 340px);
   background: var(--s1); overflow: hidden;
 }
 
@@ -123,3 +124,13 @@
   font-size: 8px; font-weight: 700; color: #fff;
 }
 .avlbl { font-size: 10px; color: #444; margin-left: 4px; }
+
+@media (max-width: 700px) {
+  .bar {
+    padding: 8px 12px;
+  }
+
+  .canvas {
+    height: 300px;
+  }
+}

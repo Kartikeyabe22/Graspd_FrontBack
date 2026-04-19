@@ -31,3 +31,24 @@
   font-family: var(--f); transition: background .15s;
 }
 .solid:hover { background: #d0d0d0; }
+
+@media (max-width: 900px) {
+  .nav {
+    padding: 0 16px;
+    height: 56px;
+  }
+
+  .links {
+    display: none;
+  }
+
+  .right {
+    gap: 6px;
+  }
+
+  .ghost,
+  .solid {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+}

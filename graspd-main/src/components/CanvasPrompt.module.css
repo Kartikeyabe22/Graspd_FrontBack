@@ -1,22 +1,26 @@
 .wrap {
   position: absolute;
-  top: 16px;
+  top: clamp(10px, 1.8vh, 18px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 500;
   pointer-events: all;
+  width: max-content;
+  max-width: 90vw;
 }
 
 .bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: clamp(3px, 0.45vw, 6px);
   background: rgba(10,10,10,0.92);
   border: 1px solid #252525;
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: 7px;
+  padding: clamp(3px, 0.5vh, 5px) clamp(6px, 0.8vw, 8px);
   backdrop-filter: blur(16px);
   box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  flex-wrap: nowrap;
+  justify-content: center;
 }
 
 .label {
@@ -42,13 +46,14 @@
 .input:disabled { opacity: 0.5; }
 
 .btn {
-  font-size: 12px;
+  font-size: clamp(9px, 0.72vw, 10px);
   font-weight: 500;
   background: #ebebeb;
   color: #080808;
   border: none;
-  padding: 7px 16px;
-  border-radius: 7px;
+  padding: 0 clamp(8px, 1vw, 10px);
+  height: clamp(26px, 2.8vh, 30px);
+  border-radius: 5px;
   cursor: pointer;
   font-family: 'Inter', sans-serif;
   white-space: nowrap;
@@ -80,7 +85,7 @@
 
 .divider {
   width: 1px;
-  height: 20px;
+  height: clamp(12px, 1.5vh, 16px);
   background: #1f1f1f;
   flex-shrink: 0;
 }
@@ -88,13 +93,13 @@
 .rateWrap {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 4px;
+  gap: 4px;
+  padding: 0 1px;
   flex-shrink: 0;
 }
 
 .rateLabel {
-  font-size: 10px;
+  font-size: 8px;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: #666;
@@ -102,27 +107,28 @@
 }
 
 .rateSlider {
-  width: 90px;
+  width: clamp(50px, 5.8vw, 62px);
   accent-color: #e5e5e5;
 }
 
 .rateValue {
-  font-size: 11px;
+  font-size: 9px;
   color: #bbb;
   font-family: 'Inter', sans-serif;
-  min-width: 34px;
+  min-width: 22px;
   text-align: right;
 }
 
 .tutorBtn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: transparent;
   border: none;
-  padding: 6px 10px;
-  border-radius: 7px;
-  font-size: 12px;
+  padding: 0 6px;
+  height: clamp(26px, 2.8vh, 30px);
+  border-radius: 5px;
+  font-size: 10px;
   font-weight: 500;
   color: #555;
   cursor: pointer;
@@ -134,8 +140,8 @@
 .tutorBtn:hover { color: #aaa; }
 
 .tutorDot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #4ade80;
   flex-shrink: 0;
@@ -144,7 +150,7 @@
 
 .statusText {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: clamp(11px, 0.95vw, 12px);
   color: #ddd;
   font-family: 'Inter', sans-serif;
   background: rgba(5, 5, 5, 0.8);
@@ -155,4 +161,20 @@
 @keyframes tutorPulse {
   0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(74,222,128,.4); }
   50%      { opacity: .7; box-shadow: 0 0 0 4px rgba(74,222,128,0); }
+}
+
+@media (max-width: 960px) {
+  .wrap {
+    width: 94vw;
+    max-width: 760px;
+  }
+
+  .bar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .divider {
+    display: none;
+  }
 }
