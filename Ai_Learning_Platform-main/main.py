@@ -1,4 +1,5 @@
 import os
+import re
 
 # -------------------- TEACHING JSON OBJECT EXTRACTION --------------------
 # -------------------- SAFE JSON EXTRACTION --------------------
@@ -51,6 +52,129 @@ def run_llm_direct(prompt_text: str) -> str:
         return response.content.strip()
     except:
         return str(response).strip()
+
+def _is_poor_title(title: str) -> bool:
+    if title is None:
+        return True
+    cleaned = title.strip()
+    if not cleaned:
+        return True
+    lowered = cleaned.lower()
+    if lowered in {"untitled", "[image only page]"}:
+        return True
+    if len(cleaned) < 4:
+        return True
+    if sum(ch.isalpha() for ch in cleaned) < 2:
+        return True
+    return False
+
+def _generate_topic_title_for_page(page_index: int, title: str, content: str) -> str:
+    prompt = f"""
+You are generating a concise topic title for a single PDF page.
+
+Page index: {page_index}
+Extracted title: {title or ""}
+Page content:
+{content or ""}
+
+Return ONLY a concise topic title (3-8 words).
+Do NOT add quotes, markdown, or extra text.
+"""
+    raw = run_llm_direct(prompt)
+    cleaned = (raw or "").strip().strip('"').strip("'")
+    if not cleaned:
+        return f"Topic {page_index + 1}"
+    return cleaned
+
+def _is_bad_topic_label(text: str) -> bool:
+    if text is None:
+        return True
+    cleaned = text.strip()
+    if not cleaned:
+        return True
+    lowered = cleaned.lower().replace(" ", "")
+    banned_fragments = [
+        "notfordistribution",
+        "confidential",
+        "internalonly",
+        "proprietary",
+        "do not distribute",
+        "donotdistribute",
+        "copyright",
+        "all rights reserved"
+    ]
+    return any(fragment.replace(" ", "") in lowered for fragment in banned_fragments)
+
+def _safe_text(value: str, fallback: str) -> str:
+    if not isinstance(value, str):
+        return fallback
+    cleaned = value.strip()
+    return cleaned if cleaned else fallback
+
+def _normalize_stage_a_output(structured: dict, slide_title: str, slide_content: str, idx_topic: int) -> dict:
+    fallback_title = slide_title if not _is_poor_title(slide_title) else f"Page {idx_topic + 1}"
+    topic = _safe_text(structured.get("topic") if isinstance(structured, dict) else None, fallback_title)
+    if _is_bad_topic_label(topic) or _is_poor_title(topic):
+        topic = fallback_title
+
+    canvas = structured.get("canvas") if isinstance(structured, dict) else None
+    if not isinstance(canvas, dict):
+        canvas = {}
+    canvas_title = _safe_text(canvas.get("title"), fallback_title)
+    if _is_bad_topic_label(canvas_title) or _is_poor_title(canvas_title):
+        canvas_title = fallback_title
+
+    content_fallback = "This page explains a key concept from the document."
+    canvas_content = _safe_text(canvas.get("content"), content_fallback)
+
+    important_points = canvas.get("important_points") if isinstance(canvas, dict) else None
+    if not isinstance(important_points, list):
+        important_points = []
+    important_points = [p for p in important_points if isinstance(p, str) and p.strip()]
+
+    voice_source = structured.get("voice_source") if isinstance(structured, dict) else None
+    lines = voice_source.get("lines") if isinstance(voice_source, dict) else None
+    if not isinstance(lines, list):
+        lines = []
+    lines = [l.strip() for l in lines if isinstance(l, str) and l.strip()]
+    if not lines:
+        candidates = [l.strip() for l in slide_content.split("\n") if l.strip()]
+        lines = candidates[:2] if candidates else [canvas_title]
+
+    return {
+        "topic": topic,
+        "canvas": {
+            "title": canvas_title,
+            "content": canvas_content,
+            "important_points": important_points
+        },
+        "voice_source": {
+            "lines": lines
+        }
+    }
+
+def _clean_professor_voice_script(script: str, max_sentences: int = 6) -> str:
+    if not isinstance(script, str):
+        return ""
+
+    text = script.strip()
+    if not text:
+        return ""
+
+    # Remove common filler starts and normalize whitespace.
+    text = re.sub(r"^(arey|arre|dekho|chalo|toh|acha|hmm)[\s,.:;-]*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    # Keep narration concise by limiting sentence count.
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    parts = [p.strip() for p in parts if p.strip()]
+    if len(parts) > max_sentences:
+        text = " ".join(parts[:max_sentences]).strip()
+
+    # Reintroduce light pause points for TTS flow.
+    text = re.sub(r"\s*\.\s*", ".\n", text)
+    text = re.sub(r"\n{2,}", "\n", text).strip()
+    return text
 
 import shutil
 import json
@@ -323,7 +447,7 @@ def delete_session(session_id: str, current_user: dict = Depends(get_current_use
 @app.post("/sessions/{session_id}/upload")
 async def upload_documents(
     session_id: str,
-    files: Annotated[List[UploadFile], File(..., description="Upload PDF or DOCX files")],
+    files: Annotated[List[UploadFile], File(..., description="Upload PDF files")],
     current_user: dict = Depends(get_current_user)
 ):
     if session_id not in get_sessions_from_db(user_id=current_user["id"]):
@@ -339,14 +463,11 @@ async def upload_documents(
     for uploaded_file in files:
         file_ext = uploaded_file.filename.split('.')[-1].lower()
 
-        # ✅ Restrict file types
-        if uploaded_file.content_type not in [
-            "application/pdf",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ]:
+        # Restrict file types (MVP: PDF only)
+        if uploaded_file.content_type != "application/pdf" or file_ext != "pdf":
             failed_files.append({
                 "filename": uploaded_file.filename,
-                "error": "Invalid file type"
+                "error": "Only PDF files are supported in MVP mode"
             })
             continue
 
@@ -358,91 +479,53 @@ async def upload_documents(
             f.write(await uploaded_file.read())
 
         try:
-            if file_ext == "pdf":
-                loader = PyPDFLoader(file_path)
-                docs = loader.load()
-            elif file_ext == "docx":
-                docs = load_docx_file(file_path)
-            else:
-                raise Exception("Unsupported format")
+            loader = PyPDFLoader(file_path)
+            docs = loader.load()
 
             add_file_to_db(session_id, uploaded_file.filename, file_path, user_id=current_user["id"])
 
             # --- SLIDE/PAGE extraction for teaching (with title/body split) ---
             slides = []  # Each is a dict: {"title": ..., "content": ...}
-            if file_ext == "pdf":
-                for idx, doc in enumerate(docs):
-                    content = doc.page_content.strip()
-                    lines = [l.strip() for l in content.split("\n") if l.strip()]
-                    title = lines[0] if lines else "Untitled"
-                    body = "\n".join(lines[1:]) if len(lines) > 1 else ""
-                    # If both title and body are empty, treat as image-only
-                    if not title and not body:
-                        title = "[IMAGE ONLY PAGE]"
-                        body = ""
-                    add_slide_to_db(session_id, file_path, idx, body, title, user_id=current_user["id"])
-                    slides.append({"title": title, "content": body})
-                    slide_db_count += 1
-            elif file_ext == "docx":
-                content = docs[0].page_content.strip() if docs else ""
+            for idx, doc in enumerate(docs):
+                content = doc.page_content.strip()
                 lines = [l.strip() for l in content.split("\n") if l.strip()]
                 title = lines[0] if lines else "Untitled"
                 body = "\n".join(lines[1:]) if len(lines) > 1 else ""
                 if not title and not body:
                     title = "[IMAGE ONLY PAGE]"
                     body = ""
-                add_slide_to_db(session_id, file_path, 0, body, title, user_id=current_user["id"])
+                add_slide_to_db(session_id, file_path, idx, body, title, user_id=current_user["id"])
                 slides.append({"title": title, "content": body})
                 slide_db_count += 1
 
-            # --- Topic generation: use only slide titles ---
-            slide_titles = [s["title"] for s in slides if s["title"] and s["title"] != "[IMAGE ONLY PAGE]"]
-            topic_text = "\n".join(slide_titles[:15])
-            topic_prompt = f"""
-These are slide titles from a presentation:
-
-{topic_text}
-
-Generate 4-6 main topics in logical teaching order.
-
-Return ONLY a valid JSON array of strings.
-Do NOT add explanation.
-Do NOT add markdown.
-Do NOT add text before or after.
-
-Example:
-[\"Topic 1\", \"Topic 2\"]
-"""
-
-            # Use direct LLM call for topic extraction (NO RAG)
-            raw_topics = run_llm_direct(topic_prompt)
-            print("RAW TOPICS RESPONSE:", raw_topics)
-            topics = extract_json_array(raw_topics)
-            print("PARSED TOPICS:", topics)
-            # Validate topics
-            if not isinstance(topics, list) or len(topics) < 1 or not all(isinstance(t, str) for t in topics):
+            total_slides = len(slides)
+            if total_slides < 1:
                 failed_files.append({
                     "filename": uploaded_file.filename,
-                    "error": "Topic extraction failed"
+                    "error": "No slides/pages extracted"
                 })
-                raise HTTPException(500, "Topic extraction failed")
+                raise HTTPException(500, "No slides/pages extracted")
 
-            # Map topics to slide ranges (even split)
-            total_slides = len(slides)
-            num_topics = len(topics)
-            base = total_slides // num_topics
-            rem = total_slides % num_topics
-            slide_ranges = []
-            start = 0
-            for i in range(num_topics):
-                end = start + base + (1 if i < rem else 0)
-                slide_ranges.append((start, end-1))
-                start = end
-
-            # Store topics and mapping in DB
-            for i, topic in enumerate(topics):
-                rng = slide_ranges[i]
-                add_topic_to_db(session_id, file_path, i, topic, rng[0], rng[1], user_id=current_user["id"])
+            # LEGACY TOPIC PIPELINE (POST-MVP)
+            # --- Topic generation: one topic per page ---
+            # for idx, slide in enumerate(slides):
+            #     title = slide.get("title", "")
+            #     body = slide.get("content", "")
+            #     if _is_poor_title(title):
+            #         if body or title:
+            #             title = _generate_topic_title_for_page(idx, title, body)
+            #         else:
+            #             title = f"Topic {idx + 1}"
+            #
+            #     add_topic_to_db(
+            #         session_id,
+            #         file_path,
+            #         idx,
+            #         title,
+            #         idx,
+            #         idx,
+            #         user_id=current_user["id"]
+            #     )
 
             # --- Chroma chunking for chat endpoint only ---
             splitter = RecursiveCharacterTextSplitter(
@@ -499,147 +582,174 @@ def _make_teaching_step(session_id: str, user_id: int):
     current_pdf = pdfs[idx_pdf]
     file_path = current_pdf.get("file_path")
 
-    # --- Get topics ---
-    topics_db = get_topics_for_file(session_id, file_path, user_id)
-    print("TOPICS DB:", topics_db)
+    # MVP FLOW
+    slides = get_slides_for_file(session_id, file_path, user_id)
+    if not slides:
+        raise HTTPException(400, "No slides found. Upload may have failed.")
 
-    if not topics_db:
-        raise HTTPException(400, "No topics found. Upload may have failed.")
-
-    if idx_topic >= len(topics_db):
+    if idx_topic >= len(slides):
         return {"message": "Teaching completed"}
 
+    current_slide = slides[idx_topic]
+    slide_title = current_slide.get("title", "")
+    slide_content = current_slide.get("content", "")
 
-    topic_row = topics_db[idx_topic]
-    topic = topic_row[1]
-    start_slide = topic_row[2]
-    end_slide = topic_row[3]
+    # IMAGE ONLY PAGE
+    is_image_only = (not slide_content or slide_content == "[IMAGE ONLY PAGE]") and (
+        not slide_title or slide_title == "[IMAGE ONLY PAGE]"
+    )
 
-    # --- Get slides ---
-    slides = get_slides_for_file(session_id, file_path, user_id)
-    if not slides or start_slide > end_slide or start_slide < 0 or end_slide >= len(slides):
-        raise HTTPException(500, "Invalid slide range for topic")
-    selected_slides = slides[start_slide:end_slide+1]
-    # If all slides are image-only or empty, fallback to visual slide response
-    if all((not s["content"] or s["content"] == "[IMAGE ONLY PAGE]") for s in selected_slides):
-        # Use the first slide's title if available
-        slide_title = selected_slides[0]["title"] if selected_slides and selected_slides[0]["title"] else "[IMAGE ONLY PAGE]"
+    if is_image_only:
         return {
             "step": idx_topic + 1,
             "pdf_index": idx_pdf,
             "topic_index": idx_topic,
-            "topic": topic,
+            "topic": slide_title or f"Page {idx_topic + 1}",
             "canvas": {
-                "title": slide_title,
-                "content": "This slide represents a visual diagram or UI flow.",
+                "title": slide_title or f"Page {idx_topic + 1}",
+                "content": "This slide contains a visual diagram or UI representation.",
                 "important_points": []
             },
             "voice": {
-                "script": "This slide shows a visual representation. Please observe it carefully."
+                "script": "Is page mein visual content hai. Diagram ya UI flow ko observe kariye."
             }
         }
-    # Otherwise, build context with titles and content
-    context_fragment = "\n\n".join([
-        f"Title: {s['title']}\nContent:\n{s['content']}" for s in selected_slides
-    ])
+
+    context_fragment = f"Title: {slide_title}\nContent:\n{slide_content}"
     context_fragment = context_fragment[:3500]
 
-    # --- Prompt ---
-    teaching_prompt = f"""
-You are a professor teaching a student step-by-step.
-
-Topic: {topic}
-
-Instructions:
-- Explain clearly and simply
-- Focus only on this topic
-- Highlight important points for exams
-- Avoid unnecessary details
-
-You MUST return ONLY valid JSON.
-Do NOT use markdown.
-Do NOT add headings.
-Do NOT add any text before or after JSON.
-
-STRICT OUTPUT FORMAT:
+    # -------------------- STAGE A --------------------
+    stage_a_prompt = f"""
+Return ONLY valid JSON using this exact schema:
 
 {{
+  "topic": "string",
   "canvas": {{
-    "title": "{topic}",
-    "content": "2-4 line explanation",
-    "important_points": ["point1", "point2"]
+    "title": "string",
+    "content": "short explanation in English (max 3 lines)",
+    "important_points": ["string", "string"]
   }},
-  "voice": {{
-    "script": "slightly longer natural explanation"
+  "voice_source": {{
+    "lines": ["main point 1", "main point 2"]
   }}
 }}
+
+Rules:
+- Valid JSON only
+- No markdown
+- No extra text
+- Keep explanation concise and high-signal (max 3 short lines)
+- Explain only what is written in the page
+- Do not add outside assumptions
+- Select only the most important concepts (ignore trivial/redundant text)
+- important_points must be short and relevant
+- voice_source.lines should be 1-2 short key concepts (max 14 words each)
+- Never use legal/watermark text as topic/title
 
 Context:
 {context_fragment}
 """
 
-    # --- LLM Call ---
-    raw = run_llm_direct(teaching_prompt)
-    print("RAW TEACHING RESPONSE:", raw)
+    stage_a_raw = run_llm_direct(stage_a_prompt)
+    stage_a_structured = extract_json_object(stage_a_raw)
 
-    structured = extract_json_object(raw)
-    print("PARSED STRUCTURED:", structured)
+    if not stage_a_structured:
+        repair_prompt = f"""
+Convert this into valid JSON only using schema:
 
-    # =========================
-    # 🔥 FALLBACK LOGIC (KEY)
-    # =========================
+{{
+  "topic": "string",
+  "canvas": {{
+    "title": "string",
+    "content": "string",
+    "important_points": ["string"]
+  }},
+  "voice_source": {{
+    "lines": ["string"]
+  }}
+}}
 
-    if not structured:
-        structured = {
+Text:
+{stage_a_raw}
+"""
+        repaired = run_llm_direct(repair_prompt)
+        stage_a_structured = extract_json_object(repaired)
+
+    if not stage_a_structured:
+        stage_a_structured = {
+            "topic": slide_title or f"Page {idx_topic + 1}",
             "canvas": {
-                "title": topic,
-                "content": raw[:200],
+                "title": slide_title or f"Page {idx_topic + 1}",
+                "content": "This page explains the given topic.",
                 "important_points": []
             },
-            "voice": {
-                "script": raw[:500]
+            "voice_source": {
+                "lines": [slide_content[:120] if slide_content else slide_title]
             }
         }
 
-    elif "canvas" not in structured or "voice" not in structured:
+    stage_a = _normalize_stage_a_output(
+        stage_a_structured,
+        slide_title,
+        slide_content,
+        idx_topic
+    )
 
-        # Case: only canvas returned
-        if isinstance(structured, dict) and "title" in structured:
-            structured = {
-                "canvas": structured,
-                "voice": {
-                    "script": structured.get("content", "")
-                }
-            }
+    # -------------------- STAGE B --------------------
+    source_lines = "\n".join(stage_a["voice_source"]["lines"])
 
-        # fallback
-        else:
-            structured = {
-                "canvas": {
-                    "title": topic,
-                    "content": raw[:200],
-                    "important_points": []
-                },
-                "voice": {
-                    "script": raw[:500]
-                }
-            }
+    stage_b_prompt = f"""
+You are an excellent professor giving a memorable short explanation.
 
-    # Final safety
-    if "canvas" not in structured or "voice" not in structured:
-        raise HTTPException(500, "Failed to build valid teaching response")
+Goal:
+Teach clearly and naturally from the key concepts only.
+
+Rules:
+- Plain text only
+- 4-6 concise sentences
+- Natural bilingual flow (English + Roman Hindi)
+- Keep technical terms in English
+- Use Hindi only to improve clarity
+- No robotic line-by-line translation
+- No repetition or overexplaining
+- Focus only on the given concepts
+- No filler words: arey, arre, dekho, chalo, toh, acha, hmm
+- Warm, smart, student-friendly professional tone
+
+Key concepts:
+{source_lines}
+"""
+
+    voice_script = run_llm_direct(stage_b_prompt).strip()
+
+    if not voice_script:
+        voice_script = "Yeh page given concept ko short mein explain karta hai."
+
+    voice_script = _clean_professor_voice_script(voice_script)
+    if not voice_script:
+        voice_script = "This page explains an important concept. Matlab is concept ko samajhna practical decision making ke liye zaroori hai."
+
+    topic = stage_a["topic"]
+
+    if _is_bad_topic_label(topic) or _is_poor_title(topic):
+        topic = slide_title if not _is_poor_title(slide_title) else f"Page {idx_topic + 1}"
+
+    canvas_title = stage_a["canvas"].get("title", topic)
+    if _is_bad_topic_label(canvas_title) or _is_poor_title(canvas_title):
+        canvas_title = topic
+
+    stage_a["canvas"]["title"] = canvas_title
 
     return {
         "step": idx_topic + 1,
         "pdf_index": idx_pdf,
         "topic_index": idx_topic,
         "topic": topic,
-        "canvas": structured["canvas"],
-        "voice": structured["voice"]
+        "canvas": stage_a["canvas"],
+        "voice": {
+            "script": voice_script
+        }
     }
-
-
-
 # --- New teaching start: fetch topics from DB, no similarity_search ---
 @app.post("/sessions/{session_id}/teach/start")
 def start_teaching(session_id: str, current_user: dict = Depends(get_current_user)):
@@ -677,14 +787,23 @@ def next_teaching_step(session_id: str, current_user: dict = Depends(get_current
     state = teaching_sessions[session_id]
     state["current_topic_index"] += 1
 
-    # Get current PDF and topics from DB
+    # MVP FLOW: advance by page count
     if state["current_pdf_index"] < len(state["pdfs"]):
         current_pdf = state["pdfs"][state["current_pdf_index"]]
         file_path = current_pdf["file_path"]
-        topics_db = get_topics_for_file(session_id, file_path, current_user["id"])
-        if state["current_topic_index"] >= len(topics_db):
+        slides = get_slides_for_file(session_id, file_path, current_user["id"])
+        if state["current_topic_index"] >= len(slides):
             state["current_pdf_index"] += 1
             state["current_topic_index"] = 0
+
+    # LEGACY TOPIC PIPELINE (POST-MVP)
+    # if state["current_pdf_index"] < len(state["pdfs"]):
+    #     current_pdf = state["pdfs"][state["current_pdf_index"]]
+    #     file_path = current_pdf["file_path"]
+    #     topics_db = get_topics_for_file(session_id, file_path, current_user["id"])
+    #     if state["current_topic_index"] >= len(topics_db):
+    #         state["current_pdf_index"] += 1
+    #         state["current_topic_index"] = 0
 
     if state["current_pdf_index"] >= len(state["pdfs"]):
         return {"message": "Teaching completed"}
