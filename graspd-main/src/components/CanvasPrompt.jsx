@@ -28,6 +28,14 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
     const files = e.target.files
     if (!files || !files.length || !editor) return
 
+    const pdfFiles = Array.from(files).filter(file => file.type === 'application/pdf')
+    if (!pdfFiles.length) {
+      setUploadStatus('error')
+      setTimeout(() => setUploadStatus('idle'), 3000)
+      e.target.value = ''
+      return
+    }
+
     setUploadStatus('loading')
     try {
       // Use current session if available, otherwise create a new one
@@ -50,7 +58,7 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
       }
       
       // Upload files to the current session
-      const uploadResult = await uploadDocuments(sessionId, Array.from(files))
+      const uploadResult = await uploadDocuments(sessionId, pdfFiles)
       console.log('Upload result:', uploadResult)
 
       setUploadStatus('idle')
@@ -73,7 +81,7 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.docx"
+          accept=".pdf,application/pdf"
           onChange={handleFileSelect}
           style={{ display: 'none' }}
         />
@@ -102,7 +110,7 @@ export default function CanvasPrompt({ editor, onOpenChat, activeSessionId }) {
           className={`${styles.btn} ${uploadStatus === 'loading' ? styles.loading : ''}`}
           onClick={handleUploadClick}
           disabled={uploadStatus === 'loading'}
-          title="Upload PDF or DOCX files for Q&A"
+          title="Upload PDF files for Q&A"
         >
           {uploadStatus === 'loading' ? (
             <span className={styles.dots}>
