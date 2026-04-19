@@ -29,7 +29,7 @@
   min-width: 0;
 }
 .topic {
-  font-size: 12px;
+  font-size: 11px;
   color: #777;
   font-family: 'Inter', sans-serif;
   letter-spacing: -.01em;
@@ -42,7 +42,7 @@
 .active .topic { color: #aaa; }
 
 .time {
-  font-size: 10px;
+  font-size: 9px;
   color: #2a2a2a;
   font-family: 'Inter', sans-serif;
   margin-top: 2px;
@@ -94,7 +94,7 @@
 .cancel:hover { color: #f87171; border-color: rgba(248,113,113,.3); }
 
 .editInput {
-  font-size: 12px;
+  font-size: 11px;
   color: #aaa;
   background: #0a0a0a;
   border: 1px solid #2a2a2a;
