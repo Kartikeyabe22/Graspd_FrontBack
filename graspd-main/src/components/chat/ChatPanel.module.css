@@ -1,14 +1,14 @@
 /* Panel */
 .panel {
   position: fixed;
-  bottom: clamp(64px, 9vh, 80px);
+  bottom: clamp(52px, 7.2vh, 64px);
   right: clamp(8px, 2vw, 24px);
   z-index: 500;
-  width: min(380px, calc(100vw - 24px));
-  height: min(540px, calc(100dvh - 116px));
+  width: min(292px, calc(100vw - 22px));
+  height: min(386px, calc(100dvh - 164px));
   background: #080808;
   border: 1px solid #1a1a1a;
-  border-radius: 16px;
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -28,7 +28,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 12px;
+  padding: 9px 11px 8px;
   border-bottom: 1px solid #111;
   flex-shrink: 0;
   background: #080808;
@@ -36,11 +36,11 @@
 .headerLeft {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
 }
 .headerDot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #4ade80;
   animation: pulse 2s ease-in-out infinite;
@@ -51,26 +51,26 @@
   50%      { opacity: .8; box-shadow: 0 0 0 5px rgba(74,222,128,0); }
 }
 .headerTitle {
-  font-size: 13px;
+  font-size: 10.5px;
   font-weight: 500;
   color: #e0e0e0;
   font-family: 'Inter', sans-serif;
   letter-spacing: -.02em;
 }
 .headerSub {
-  font-size: 10px;
+  font-size: 7.5px;
   color: #333;
   font-family: 'Inter', sans-serif;
   margin-left: 2px;
 }
 .closeBtn {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 6px;
   background: #111;
   border: 1px solid #1a1a1a;
   color: #444;
-  font-size: 10px;
+  font-size: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -84,10 +84,10 @@
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 14px;
+  padding: 10px 9px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   scrollbar-width: thin;
   scrollbar-color: #181818 transparent;
 }
@@ -101,12 +101,12 @@
 .thinking {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 4px;
+  gap: 4px;
+  padding: 5px 3px;
 }
 .thinkDot {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: #2a2a2a;
   animation: think 1.4s ease-in-out infinite;
@@ -122,8 +122,8 @@
 .inputArea {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 10px 12px 12px;
+  gap: 6px;
+  padding: 7px 8px 8px;
   border-top: 1px solid #111;
   flex-shrink: 0;
   background: #080808;
@@ -132,14 +132,14 @@
   flex: 1;
   background: #0d0d0d;
   border: 1px solid #1a1a1a;
-  border-radius: 10px;
-  padding: 9px 13px;
-  font-size: 12.5px;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 10.4px;
   color: #ccc;
   font-family: 'Inter', sans-serif;
   resize: none;
   outline: none;
-  line-height: 1.55;
+  line-height: 1.45;
   transition: border-color .2s;
   scrollbar-width: none;
   letter-spacing: -.01em;
@@ -150,13 +150,13 @@
 .textarea:disabled { opacity: 0.4; }
 
 .sendBtn {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 29px;
+  height: 29px;
+  border-radius: 7px;
   background: #e8e8e8;
   color: #080808;
   border: none;
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -173,16 +173,16 @@
 .sendBtn:disabled { opacity: 0.25; cursor: default; }
 /* File preview above input */
 .filePreview {
-  margin: 0 12px 8px;
+  margin: 0 8px 6px;
   border: 1px solid #1a1a1a;
-  border-radius: 8px;
+  border-radius: 7px;
   overflow: hidden;
   position: relative;
   background: #0d0d0d;
 }
 .fileImg {
   width: 100%;
-  max-height: 120px;
+  max-height: 96px;
   object-fit: cover;
   display: block;
   opacity: 0.8;
@@ -190,12 +190,12 @@
 .filePdf {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 8px 10px;
 }
-.filePdfIcon { font-size: 16px; }
+.filePdfIcon { font-size: 14px; }
 .filePdfName {
-  font-size: 11px;
+  font-size: 9.2px;
   color: #666;
   font-family: 'Inter', sans-serif;
   white-space: nowrap;
@@ -204,15 +204,15 @@
 }
 .fileRemove {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 20px;
-  height: 20px;
+  top: 5px;
+  right: 5px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: rgba(0,0,0,0.7);
   border: 1px solid #333;
   color: #888;
-  font-size: 9px;
+  font-size: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -223,13 +223,13 @@
 
 /* Upload button */
 .uploadBtn {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 29px;
+  height: 29px;
+  border-radius: 7px;
   background: #0d0d0d;
   border: 1px solid #1a1a1a;
   color: #444;
-  font-size: 18px;
+  font-size: 16px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -244,17 +244,17 @@
   .panel {
     right: 6px;
     bottom: 8px;
-    width: calc(100vw - 12px);
-    height: calc(100dvh - 16px);
+    width: min(292px, calc(100vw - 12px));
+    height: min(386px, calc(100dvh - 16px));
     border-radius: 12px;
   }
 
   .messages {
-    padding: 12px 10px;
-    gap: 10px;
+    padding: 10px 9px;
+    gap: 8px;
   }
 
   .inputArea {
-    padding: 8px 10px 10px;
+    padding: 7px 8px 8px;
   }
 }

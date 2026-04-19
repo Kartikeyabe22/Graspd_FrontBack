@@ -15,9 +15,9 @@
   color: white;
   border: none;
   border-radius: 6px;
-  padding: 8px clamp(12px, 3vw, 22px);
+  padding: 7px clamp(10px, 2.4vw, 18px);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 12px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(34,197,94,0.15);
   transition: background 0.15s;

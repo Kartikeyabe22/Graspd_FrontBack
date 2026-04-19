@@ -6,11 +6,11 @@
 .userBubble {
   background: #111;
   border: 1px solid #1c1c1c;
-  border-radius: 12px 12px 3px 12px;
-  padding: 9px 13px;
-  font-size: 12.5px;
+  border-radius: 11px 11px 3px 11px;
+  padding: 7px 10px;
+  font-size: 10.8px;
   color: #bbb;
-  line-height: 1.6;
+  line-height: 1.45;
   max-width: 88%;
   font-family: 'Inter', sans-serif;
   letter-spacing: -.01em;
@@ -20,22 +20,22 @@
 .aiWrap {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
 }
 
 .badge {
-  font-size: 9px;
+  font-size: 7.2px;
   letter-spacing: .12em;
   text-transform: uppercase;
   font-weight: 600;
   font-family: 'Inter', sans-serif;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 .badge::before {
   content: '';
-  width: 16px;
+  width: 12px;
   height: 1px;
   background: currentColor;
   opacity: .4;
@@ -47,31 +47,31 @@
 .aiBubble {
   background: #0c0c0c;
   border: 1px solid #161616;
-  border-radius: 3px 12px 12px 12px;
-  padding: 11px 14px;
+  border-radius: 3px 11px 11px 11px;
+  padding: 9px 11px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .line {
-  font-size: 12.5px;
+  font-size: 10.8px;
   color: #888;
-  line-height: 1.7;
+  line-height: 1.48;
   font-family: 'Inter', sans-serif;
   margin: 0;
   letter-spacing: -.01em;
 }
-.line:empty { height: 6px; }
+.line:empty { height: 5px; }
 
 .resources {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   margin-top: 2px;
 }
 .userFile {
   margin-bottom: 4px;
-  border-radius: 8px;
+  border-radius: 7px;
   overflow: hidden;
   border: 1px solid #1c1c1c;
   max-width: 88%;
@@ -79,14 +79,14 @@
 }
 .userFileImg {
   width: 100%;
-  max-height: 100px;
+  max-height: 90px;
   object-fit: cover;
   display: block;
   opacity: 0.75;
 }
 .userFilePdf {
-  padding: 7px 10px;
-  font-size: 11px;
+  padding: 6px 8px;
+  font-size: 9.2px;
   color: #555;
   font-family: 'Inter', sans-serif;
   background: #0d0d0d;
