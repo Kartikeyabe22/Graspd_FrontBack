@@ -594,24 +594,23 @@ def _make_teaching_step(session_id: str, user_id: int):
     slide_title = current_slide.get("title", "")
     slide_content = current_slide.get("content", "")
 
-    # IMAGE ONLY PAGE
-    is_image_only = (not slide_content or slide_content == "[IMAGE ONLY PAGE]") and (
-        not slide_title or slide_title == "[IMAGE ONLY PAGE]"
-    )
+    # IMAGE PAGE: if page body is missing/marked image-only, do not run LLM explanation.
+    is_image_only = (not slide_content or slide_content == "[IMAGE ONLY PAGE]")
 
     if is_image_only:
+        page_title = slide_title if not _is_poor_title(slide_title) else f"Page {idx_topic + 1}"
         return {
             "step": idx_topic + 1,
             "pdf_index": idx_pdf,
             "topic_index": idx_topic,
-            "topic": slide_title or f"Page {idx_topic + 1}",
+            "topic": page_title,
             "canvas": {
-                "title": slide_title or f"Page {idx_topic + 1}",
-                "content": "This slide contains a visual diagram or UI representation.",
+                "title": page_title,
+                "content": "Image page.",
                 "important_points": []
             },
             "voice": {
-                "script": "Is page mein visual content hai. Diagram ya UI flow ko observe kariye."
+                "script": "This is an image page."
             }
         }
 
@@ -626,11 +625,11 @@ Return ONLY valid JSON using this exact schema:
   "topic": "string",
   "canvas": {{
     "title": "string",
-    "content": "short explanation in English (max 3 lines)",
-    "important_points": ["string", "string"]
+    "content": "short explanation in English (max 5 lines)",
+    "important_points": ["string", "string", "string", "string"]
   }},
   "voice_source": {{
-    "lines": ["main point 1", "main point 2"]
+    "lines": ["string", "string", "string", "string"]
   }}
 }}
 
@@ -638,13 +637,15 @@ Rules:
 - Valid JSON only
 - No markdown
 - No extra text
-- Keep explanation concise and high-signal (max 3 short lines)
 - Explain only what is written in the page
 - Do not add outside assumptions
-- Select only the most important concepts (ignore trivial/redundant text)
-- important_points must be short and relevant
-- voice_source.lines should be 1-2 short key concepts (max 14 words each)
-- Never use legal/watermark text as topic/title
+- If page contains multiple headings/sections, include EVERY major section
+- Never ignore separate feature names like Auto Payment, Current Billing, etc.
+- Summarize each section in short form
+- important_points = one point per major section if possible
+- voice_source.lines = include all major sections
+- Do not use legal/watermark text as topic/title
+- Keep concise but complete
 
 Context:
 {context_fragment}
@@ -662,10 +663,10 @@ Convert this into valid JSON only using schema:
   "canvas": {{
     "title": "string",
     "content": "string",
-    "important_points": ["string"]
+    "important_points": ["string", "string", "string", "string"]
   }},
   "voice_source": {{
-    "lines": ["string"]
+    "lines": ["string", "string", "string", "string"]
   }}
 }}
 
@@ -712,7 +713,7 @@ Rules:
 - Use Hindi only to improve clarity
 - No robotic line-by-line translation
 - No repetition or overexplaining
-- Focus only on the given concepts
+- Explain every concept provided. Do not skip any section.
 - No filler words: arey, arre, dekho, chalo, toh, acha, hmm
 - Warm, smart, student-friendly professional tone
 
