@@ -13,7 +13,6 @@ export default function Nav() {
         <li><a href="#s3">live tutor</a></li>
       </ul>
       <div className={styles.right}>
-        <button className={styles.ghost}>log in</button>
         <button className={styles.solid} onClick={() => navigate('/canvas')}>
           quick try
         </button>

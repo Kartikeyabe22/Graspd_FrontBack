@@ -19,12 +19,6 @@
 }
 .links a:hover { color: var(--t); }
 .right { display: flex; gap: 8px; align-items: center; }
-.ghost {
-  font-size: 13px; color: var(--t3); background: transparent;
-  border: 1px solid var(--b2); padding: 7px 16px; border-radius: 8px;
-  cursor: pointer; font-family: var(--f); transition: all .2s;
-}
-.ghost:hover { color: var(--t); border-color: var(--b3); }
 .solid {
   font-size: 13px; font-weight: 500; background: var(--t); color: var(--bg);
   border: none; padding: 8px 20px; border-radius: 8px; cursor: pointer;
@@ -46,7 +40,6 @@
     gap: 6px;
   }
 
-  .ghost,
   .solid {
     padding: 7px 12px;
     font-size: 12px;

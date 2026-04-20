@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { isLoggedIn } from "../utils/auth";
+import styles from "./AuthPage.module.css";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -41,95 +42,46 @@ export default function RegisterPage() {
   };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      background: "#f6f8fa"
-    }}>
-      <div style={{
-        background: "#fff",
-        borderRadius: 12,
-        boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
-        padding: "40px 32px 28px 32px",
-        width: 340,
-        maxWidth: "90vw"
-      }}>
-        <h2 style={{
-          marginBottom: 24,
-          fontWeight: 700,
-          fontSize: 28,
-          color: "#222"
-        }}>Register</h2>
-        <form onSubmit={handleRegister}>
+    <div className={styles.page}>
+      <div className={styles.card}>
+        <div className={styles.brand}>
+          <span className={styles.brandDot} />
+          graspd
+        </div>
+        <h2 className={styles.title}>Create Account</h2>
+        <p className={styles.subtitle}>Set up your space and start building on the canvas.</p>
+
+        <form className={styles.form} onSubmit={handleRegister}>
+          <label className={styles.fieldLabel} htmlFor="register-username">Username</label>
           <input
+            id="register-username"
+            className={styles.input}
             type="text"
-            placeholder="Username"
+            placeholder="Choose a username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              marginBottom: 16,
-              border: "1px solid #d1d5db",
-              borderRadius: 6,
-              fontSize: 16
-            }}
           />
+
+          <label className={styles.fieldLabel} htmlFor="register-password">Password</label>
           <input
+            id="register-password"
+            className={styles.input}
             type="password"
-            placeholder="Password"
+            placeholder="Create a password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              marginBottom: 20,
-              border: "1px solid #d1d5db",
-              borderRadius: 6,
-              fontSize: 16
-            }}
           />
-          <button type="submit" style={{
-            width: "100%",
-            background: "#22c55e",
-            color: "#fff",
-            border: "none",
-            borderRadius: 6,
-            padding: "12px 0",
-            fontWeight: 600,
-            fontSize: 17,
-            cursor: "pointer",
-            marginBottom: 8,
-            boxShadow: "0 2px 8px rgba(34,197,94,0.10)",
-            transition: "background 0.15s"
-          }}>Register</button>
+
+          <button type="submit" className={styles.primaryBtn}>Register</button>
         </form>
-        {error && <div style={{
-          color: "#e11d48",
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
-          borderRadius: 6,
-          padding: "8px 12px",
-          marginTop: 8,
-          marginBottom: 8,
-          fontSize: 15
-        }}>{error}</div>}
-        <div style={{
-          marginTop: 18,
-          textAlign: "center",
-          fontSize: 15,
-          color: "#666"
-        }}>
+
+        {error && <div className={styles.error}>{error}</div>}
+
+        <div className={styles.footerText}>
           Already have an account?{' '}
-          <Link to="/login" style={{
-            color: "#22c55e",
-            textDecoration: "none",
-            fontWeight: 600
-          }}>Login</Link>
+          <Link to="/login" className={styles.link}>Login</Link>
         </div>
       </div>
     </div>
