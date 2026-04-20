@@ -108,27 +108,6 @@ export default function useTeaching(sessionId, editor, options = {}) {
     slideShapeIdsRef.current = []
   }
 
-  const getSlideBounds = (ed) => {
-    if (!slideShapeIdsRef.current.length) return null
-
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-
-    slideShapeIdsRef.current.forEach((id) => {
-      const bounds = ed.getShapePageBounds(id)
-      if (!bounds) return
-      minX = Math.min(minX, bounds.x)
-      minY = Math.min(minY, bounds.y)
-      maxX = Math.max(maxX, bounds.x + bounds.w)
-      maxY = Math.max(maxY, bounds.y + bounds.h)
-    })
-
-    if (!Number.isFinite(minX)) return null
-    return new Box(minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY))
-  }
-
   const createShapesForStep = async (step) => {
     const ed = editorRef.current
     if (!ed || !step) return
@@ -142,15 +121,26 @@ export default function useTeaching(sessionId, editor, options = {}) {
     const viewportBounds = typeof ed.getViewportScreenBounds === 'function'
       ? ed.getViewportScreenBounds()
       : null
-    const viewportWidth = Math.max(768, Math.round(viewportBounds?.w || window.innerWidth || 1280))
-    const viewportHeight = Math.max(520, Math.round(viewportBounds?.h || window.innerHeight || 720))
+    const viewportWidth = Math.round(viewportBounds?.w || window.innerWidth || 1280)
+    const viewportHeight = Math.round(viewportBounds?.h || window.innerHeight || 720)
 
-    const SLIDE_WIDTH = Math.round(Math.min(viewportWidth * 0.92, 1500))
-    const SLIDE_HEIGHT = Math.round(Math.min(viewportHeight * 0.82, 900))
-    const TEXT_WIDTH = Math.max(420, Math.round(SLIDE_WIDTH * 0.42))
+    // Keep a predictable frame so the whole slide remains visible at z=1.
+    const horizontalPadding = Math.round(viewportWidth * 0.03)
+    // Reserve space for the floating toolbar + teaching status strip.
+    const topPadding = Math.round(viewportHeight * 0.095)
+    const bottomPadding = Math.round(viewportHeight * 0.065)
+    const usableWidth = Math.max(1, viewportWidth - horizontalPadding * 2)
+    const usableHeight = Math.max(1, viewportHeight - topPadding - bottomPadding)
+
+    const slideAspectRatio = 16 / 9
+    const widthByHeight = usableHeight * slideAspectRatio
+    const SLIDE_WIDTH = Math.round(Math.min(usableWidth, widthByHeight))
+    const SLIDE_HEIGHT = Math.round((SLIDE_WIDTH / slideAspectRatio) * 0.97)
+    const TEXT_WIDTH = Math.max(320, Math.round(SLIDE_WIDTH * 0.42))
 
     const xStart = 0
     const yStart = 0
+    const slideFrameBounds = new Box(xStart - 1, yStart - 1, SLIDE_WIDTH + 2, SLIDE_HEIGHT + 2)
 
     const content = step.canvas.content || ''
     const points = step.canvas.important_points || []
@@ -297,6 +287,8 @@ export default function useTeaching(sessionId, editor, options = {}) {
     // Voice playback already kicked off in parallel with typing.
 
     if (points.length > 0) {
+      const keyPointsWidth = Math.max(260, Math.min(TEXT_WIDTH - 20, SLIDE_WIDTH - 80))
+
       const keyTitleId = createShapeId()
       slideShapeIdsRef.current.push(keyTitleId)
       ed.createShape({
@@ -326,26 +318,24 @@ export default function useTeaching(sessionId, editor, options = {}) {
             color: 'white',
           size: 's',
           font: 'sans',
-          w: Math.max(480, TEXT_WIDTH - 20),
+          w: keyPointsWidth,
           autoSize: false,
         },
       })
     }
 
-    // 🎬 Subtle transition to a full slide view
-    const slideBounds = getSlideBounds(ed)
-    if (slideBounds) {
-      ed.zoomToBounds(slideBounds, { animation: { duration: 300 } })
-      requestAnimationFrame(() => {
-        if (typeof ed.getZoomLevel === 'function' && typeof ed.getCamera === 'function' && typeof ed.setCamera === 'function') {
-          const zoom = ed.getZoomLevel()
-          const camera = ed.getCamera()
-          ed.setCamera(
-            { x: camera.x, y: camera.y, z: Math.max(0.1, zoom * 0.9) },
-            { animation: { duration: 200 } }
-          )
-        }
-      })
+    // Reframe from any previous pan/zoom and reserve top safe space for the teaching status strip.
+    if (typeof ed.zoomToBounds === 'function') {
+      const fitTopInset = Math.round(viewportHeight * 0.04)
+      const fitBottomInset = Math.round(viewportHeight * 0.0001)
+      const cameraFitBounds = new Box(
+        slideFrameBounds.x,
+        slideFrameBounds.y - fitTopInset,
+        slideFrameBounds.w,
+        slideFrameBounds.h + fitTopInset + fitBottomInset
+      )
+
+      ed.zoomToBounds(cameraFitBounds, { animation: { duration: 320 } })
     }
     return speechDone
   }
