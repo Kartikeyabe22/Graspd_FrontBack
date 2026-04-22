@@ -2,6 +2,8 @@ import { useState, useRef, useCallback } from 'react'
 import { Box, toRichText } from '@tldraw/editor'
 import { createShapeId } from 'tldraw'
 import { generateSpeech, createSpeechPlayer } from '../services/tts'
+import { layoutGraph } from '../utils/graphLayout'
+import { paintGraph, getGraphBounds } from '../utils/paintGraph'
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -136,10 +138,20 @@ export default function useTeaching(sessionId, editor, options = {}) {
     const widthByHeight = usableHeight * slideAspectRatio
     const SLIDE_WIDTH = Math.round(Math.min(usableWidth, widthByHeight))
     const SLIDE_HEIGHT = Math.round((SLIDE_WIDTH / slideAspectRatio) * 0.97)
-    const TEXT_WIDTH = Math.max(320, Math.round(SLIDE_WIDTH * 0.42))
-
     const xStart = 0
     const yStart = 0
+
+    const LEFT_PANEL_RATIO = 0.45
+    const leftPanelWidth = Math.round(SLIDE_WIDTH * LEFT_PANEL_RATIO)
+    const rightPanelWidth = SLIDE_WIDTH - leftPanelWidth
+    const leftPanelX = xStart
+    const rightPanelX = xStart + leftPanelWidth
+
+    const leftPadding = 40
+    const rightPadding = 28
+    const topContentY = yStart + 50
+    const textWidth = Math.max(260, leftPanelWidth - leftPadding - rightPadding)
+
     const slideFrameBounds = new Box(xStart - 1, yStart - 1, SLIDE_WIDTH + 2, SLIDE_HEIGHT + 2)
 
     const content = step.canvas.content || ''
@@ -183,20 +195,39 @@ export default function useTeaching(sessionId, editor, options = {}) {
       },
     })
 
-    // 🧠 Title
+    // Vertical divider for split layout
+    const splitDividerId = createShapeId()
+    slideShapeIdsRef.current.push(splitDividerId)
+    ed.createShape({
+      id: splitDividerId,
+      type: 'geo',
+      x: rightPanelX,
+      y: yStart + 26,
+      props: {
+        geo: 'rectangle',
+        w: 2,
+        h: Math.max(10, SLIDE_HEIGHT - 52),
+        fill: 'solid',
+        color: 'grey',
+        size: 's',
+        dash: 'solid',
+      },
+    })
+
+    // Left panel: title
     const titleId = createShapeId()
     slideShapeIdsRef.current.push(titleId)
     ed.createShape({
       id: titleId,
       type: 'text',
-      x: xStart + 40,
-      y: yStart + 50,
+      x: leftPanelX + leftPadding,
+      y: topContentY,
       props: {
         richText: toRichText(step.canvas.title || step.topic || 'Untitled'),
           color: 'white',
         size: 'xl',
         font: 'serif',
-        w: TEXT_WIDTH,
+        w: textWidth,
         autoSize: false,
       },
     })
@@ -207,11 +238,11 @@ export default function useTeaching(sessionId, editor, options = {}) {
     ed.createShape({
       id: dividerId,
       type: 'geo',
-      x: xStart + 40,
-      y: yStart + 100,
+      x: leftPanelX + leftPadding,
+      y: topContentY + 50,
       props: {
         geo: 'rectangle',
-        w: Math.round(SLIDE_WIDTH * 0.12),
+        w: Math.round(leftPanelWidth * 0.24),
         h: 2,
         fill: 'solid',
         color: 'grey',
@@ -226,14 +257,14 @@ export default function useTeaching(sessionId, editor, options = {}) {
     ed.createShape({
       id: contentId,
       type: 'text',
-      x: xStart + 40,
-      y: yStart + 140,
+      x: leftPanelX + leftPadding,
+      y: topContentY + 90,
       props: {
         richText: toRichText(content),
           color: 'white',
         size: 'l',
         font: 'sans',
-        w: TEXT_WIDTH,
+        w: textWidth,
         autoSize: false,
       },
     })
@@ -287,21 +318,21 @@ export default function useTeaching(sessionId, editor, options = {}) {
     // Voice playback already kicked off in parallel with typing.
 
     if (points.length > 0) {
-      const keyPointsWidth = Math.max(260, Math.min(TEXT_WIDTH - 20, SLIDE_WIDTH - 80))
+      const keyPointsWidth = Math.max(220, textWidth - 20)
 
       const keyTitleId = createShapeId()
       slideShapeIdsRef.current.push(keyTitleId)
       ed.createShape({
         id: keyTitleId,
         type: 'text',
-        x: xStart + 40,
-        y: yStart + Math.round(SLIDE_HEIGHT * 0.52),
+        x: leftPanelX + leftPadding,
+        y: yStart + Math.round(SLIDE_HEIGHT * 0.56),
         props: {
           richText: toRichText('Key Points'),
             color: 'white',
           size: 'l',
           font: 'serif',
-          w: TEXT_WIDTH,
+          w: textWidth,
           autoSize: false,
         },
       })
@@ -311,8 +342,8 @@ export default function useTeaching(sessionId, editor, options = {}) {
       ed.createShape({
         id: keyPointsId,
         type: 'text',
-        x: xStart + 50,
-        y: yStart + Math.round(SLIDE_HEIGHT * 0.58),
+        x: leftPanelX + leftPadding + 10,
+        y: yStart + Math.round(SLIDE_HEIGHT * 0.62),
         props: {
           richText: toRichText(points.map(p => `• ${p}`).join('\n')),
             color: 'white',
@@ -322,6 +353,81 @@ export default function useTeaching(sessionId, editor, options = {}) {
           autoSize: false,
         },
       })
+    }
+
+    // Right panel title
+    const graphTitleId = createShapeId()
+    slideShapeIdsRef.current.push(graphTitleId)
+    ed.createShape({
+      id: graphTitleId,
+      type: 'text',
+      x: rightPanelX + 28,
+      y: yStart + 42,
+      props: {
+        richText: toRichText('Concept Graph'),
+        color: 'white',
+        size: 'l',
+        font: 'serif',
+        w: Math.max(220, rightPanelWidth - 56),
+        autoSize: false,
+      },
+    })
+
+    // Right panel graph rendering
+    if (step.visual_graph?.nodes?.length) {
+      try {
+        const laidOut = layoutGraph(step.visual_graph)
+        const positioned = laidOut?.positioned || {}
+        const positionedEntries = Object.entries(positioned)
+
+        if (positionedEntries.length) {
+          const dividerSafeInset = 10
+          const panelPaddingX = 26
+          const panelPaddingTop = 95
+          const panelPaddingBottom = 24
+
+          const graphAreaX = rightPanelX + panelPaddingX + dividerSafeInset
+          const graphAreaY = yStart + panelPaddingTop
+          const graphAreaW = Math.max(170, rightPanelWidth - (panelPaddingX * 2) - dividerSafeInset)
+          const graphAreaH = Math.max(170, SLIDE_HEIGHT - panelPaddingTop - panelPaddingBottom)
+
+          const nodeCount = positionedEntries.length
+          const denseScale = nodeCount >= 8 ? 0.88 : (nodeCount >= 6 ? 0.94 : 1)
+          const initialBounds = getGraphBounds(positioned, { scale: denseScale })
+
+          const fitScale = Math.min(
+            graphAreaW / Math.max(1, initialBounds.width),
+            graphAreaH / Math.max(1, initialBounds.height),
+            1
+          )
+          const renderScale = Math.min(1, fitScale * denseScale)
+
+          const sourceCenterX = initialBounds.minX + initialBounds.width / 2
+          const sourceCenterY = initialBounds.minY + initialBounds.height / 2
+          const targetCenterX = graphAreaX + graphAreaW / 2
+          const targetCenterY = graphAreaY + graphAreaH / 2
+
+          const shifted = {}
+          positionedEntries.forEach(([id, node]) => {
+            shifted[id] = {
+              ...node,
+              x: (node.x - sourceCenterX) * fitScale + targetCenterX,
+              y: (node.y - sourceCenterY) * fitScale + targetCenterY,
+            }
+          })
+
+          const graphShapeIds = paintGraph(
+            ed,
+            { positioned: shifted, edges: laidOut.edges || [] },
+            { autoFit: false, scale: renderScale }
+          )
+          if (Array.isArray(graphShapeIds) && graphShapeIds.length) {
+            slideShapeIdsRef.current.push(...graphShapeIds)
+          }
+        }
+      } catch (err) {
+        console.error('Graph render error:', err)
+      }
     }
 
     // Reframe from any previous pan/zoom and reserve top safe space for the teaching status strip.

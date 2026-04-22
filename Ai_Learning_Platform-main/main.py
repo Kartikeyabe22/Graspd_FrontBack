@@ -32,6 +32,223 @@ def extract_json_array(text: str):
         return json.loads(match.group())
     except Exception:
         return None
+
+
+def _fallback_visual_graph(topic: str) -> dict:
+    safe_topic = (topic or "Main Topic").strip() or "Main Topic"
+    return {
+        "nodes": [
+            {"id": "1", "label": safe_topic, "type": "core"}
+        ],
+        "edges": []
+    }
+
+
+def _clean_graph_fallback(topic: str) -> dict:
+    safe_topic = (topic or "Main Topic").strip() or "Main Topic"
+    return {
+        "nodes": [
+            {"id": "1", "label": safe_topic[:28], "type": "core"},
+            {"id": "2", "label": "Key Concept 1", "type": "sub"},
+            {"id": "3", "label": "Key Concept 2", "type": "sub"}
+        ],
+        "edges": [
+            {"from": "1", "to": "2"},
+            {"from": "1", "to": "3"}
+        ]
+    }
+
+
+def _normalize_visual_graph(graph_obj, topic: str) -> dict:
+    if not isinstance(graph_obj, dict):
+        return _clean_graph_fallback(topic)
+
+    raw_nodes = graph_obj.get("nodes")
+    raw_edges = graph_obj.get("edges")
+    if not isinstance(raw_nodes, list) or not raw_nodes:
+        return _clean_graph_fallback(topic)
+
+    normalized_nodes = []
+    used_ids = set()
+    seen_labels = set()
+
+    for i, node in enumerate(raw_nodes):
+        if not isinstance(node, dict):
+            continue
+
+        node_id = str(node.get("id") or "").strip()
+        if not node_id:
+            node_id = str(i + 1)
+        if node_id in used_ids:
+            continue
+
+        label = str(node.get("label") or "").strip()
+        if not label:
+            label = f"Node {node_id}"
+        label = re.sub(r"\s+", " ", label)[:28]
+        normalized_label = label.casefold()
+        if normalized_label in seen_labels:
+            continue
+
+        node_type = str(node.get("type") or "detail").strip().lower()
+        if node_type not in {"core", "sub", "detail"}:
+            node_type = "detail"
+
+        normalized_nodes.append({
+            "id": node_id,
+            "label": label,
+            "type": node_type
+        })
+        used_ids.add(node_id)
+        seen_labels.add(normalized_label)
+
+    if not normalized_nodes:
+        return _clean_graph_fallback(topic)
+
+    node_by_id = {node["id"]: node for node in normalized_nodes}
+
+    core_candidates = [node["id"] for node in normalized_nodes if node["type"] == "core"]
+    core_id = core_candidates[0] if core_candidates else normalized_nodes[0]["id"]
+    for node in normalized_nodes:
+        node["type"] = "core" if node["id"] == core_id else node["type"]
+    for extra_core_id in core_candidates[1:]:
+        if extra_core_id in node_by_id:
+            node_by_id[extra_core_id]["type"] = "sub"
+
+    candidate_edges = []
+    seen_edges = set()
+
+    if isinstance(raw_edges, list):
+        for edge in raw_edges:
+            if not isinstance(edge, dict):
+                continue
+            from_id = str(edge.get("from") or "").strip()
+            to_id = str(edge.get("to") or "").strip()
+
+            if not from_id or not to_id or from_id == to_id:
+                continue
+            if from_id not in used_ids or to_id not in used_ids:
+                continue
+
+            key = (from_id, to_id)
+            if key in seen_edges:
+                continue
+            seen_edges.add(key)
+            candidate_edges.append({"from": from_id, "to": to_id})
+
+    sub_ids = []
+    for edge in candidate_edges:
+        if edge["from"] != core_id:
+            continue
+        child = node_by_id.get(edge["to"])
+        if not child or child["id"] == core_id:
+            continue
+        if child["type"] == "detail":
+            child["type"] = "sub"
+        if child["type"] != "sub":
+            child["type"] = "sub"
+        if child["id"] not in sub_ids:
+            sub_ids.append(child["id"])
+
+    for node in normalized_nodes:
+        if node["id"] == core_id:
+            continue
+        if node["type"] == "sub" and node["id"] not in sub_ids:
+            sub_ids.append(node["id"])
+
+    sub_ids = sub_ids[:5]
+
+    if len(sub_ids) < 2:
+        for node in normalized_nodes:
+            if node["id"] == core_id or node["id"] in sub_ids:
+                continue
+            node["type"] = "sub"
+            sub_ids.append(node["id"])
+            if len(sub_ids) >= 2:
+                break
+
+    if len(sub_ids) < 2:
+        return _clean_graph_fallback(topic)
+
+    details_by_sub = {sub_id: [] for sub_id in sub_ids}
+    detail_parent = {}
+
+    for edge in candidate_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id not in details_by_sub:
+            continue
+        child = node_by_id.get(to_id)
+        if not child or child["id"] == core_id or child["id"] in sub_ids:
+            continue
+        child["type"] = "detail"
+        if child["id"] in detail_parent:
+            continue
+        if len(details_by_sub[from_id]) >= 2:
+            continue
+        detail_parent[child["id"]] = from_id
+        details_by_sub[from_id].append(child["id"])
+
+    loose_details = [
+        node["id"]
+        for node in normalized_nodes
+        if node["id"] not in {core_id, *sub_ids} and node.get("type") == "detail"
+    ]
+
+    for detail_id in loose_details:
+        if detail_id in detail_parent:
+            continue
+        for sub_id in sub_ids:
+            if len(details_by_sub[sub_id]) >= 2:
+                continue
+            detail_parent[detail_id] = sub_id
+            details_by_sub[sub_id].append(detail_id)
+            break
+
+    ordered_node_ids = [core_id] + sub_ids
+    for sub_id in sub_ids:
+        ordered_node_ids.extend(details_by_sub[sub_id])
+
+    ordered_node_ids = ordered_node_ids[:8]
+    kept_ids = set(ordered_node_ids)
+
+    core_node = node_by_id[core_id]
+    core_node["type"] = "core"
+    final_nodes = [
+        {
+            "id": nid,
+            "label": (node_by_id[nid].get("label") or "").strip()[:28] or f"Node {nid}",
+            "type": "core" if nid == core_id else ("sub" if nid in sub_ids else "detail")
+        }
+        for nid in ordered_node_ids
+        if nid in node_by_id
+    ]
+
+    final_sub_ids = [n["id"] for n in final_nodes if n["type"] == "sub"]
+    if len(final_sub_ids) < 2:
+        return _clean_graph_fallback(topic)
+
+    final_edges = []
+    for sub_id in final_sub_ids:
+        final_edges.append({"from": core_id, "to": sub_id})
+
+    for sub_id in final_sub_ids:
+        count = 0
+        for detail_id in details_by_sub.get(sub_id, []):
+            if detail_id not in kept_ids:
+                continue
+            if count >= 2:
+                break
+            final_edges.append({"from": sub_id, "to": detail_id})
+            count += 1
+
+    if len(final_nodes) < 3:
+        return _clean_graph_fallback(topic)
+
+    return {
+        "nodes": final_nodes,
+        "edges": final_edges
+    }
 # -------------------- DIRECT LLM (NO RAG) --------------------
 # -------------------- DIRECT LLM --------------------
 
@@ -611,7 +828,8 @@ def _make_teaching_step(session_id: str, user_id: int):
             },
             "voice": {
                 "script": "This is an image page."
-            }
+            },
+            "visual_graph": _fallback_visual_graph(page_title)
         }
 
     context_fragment = f"Title: {slide_title}\nContent:\n{slide_content}"
@@ -741,6 +959,75 @@ Key concepts:
 
     stage_a["canvas"]["title"] = canvas_title
 
+    # -------------------- STAGE C --------------------
+    important_points_lines = "\n".join(stage_a["canvas"].get("important_points", []))
+    graph_context = "\n".join([
+        line for line in [
+            f"topic:\n{topic}",
+            f"canvas content:\n{stage_a['canvas'].get('content', '')}",
+            f"important_points:\n{important_points_lines}",
+            f"voice_source lines:\n{source_lines}",
+        ] if line
+    ])
+
+    stage_c_prompt = f"""
+Return ONLY valid JSON:
+
+{{
+    "nodes": [
+        {{"id":"1","label":"Main Topic","type":"core"}},
+        {{"id":"2","label":"Key Concept","type":"sub"}},
+        {{"id":"3","label":"Important Detail","type":"detail"}}
+    ],
+    "edges": [
+        {{"from":"1","to":"2"}},
+        {{"from":"2","to":"3"}}
+    ]
+}}
+
+Rules:
+- Use ONLY the most important concepts from the lesson
+- Ignore filler text
+- Ignore repetitive points
+- Ignore generic words like overview, process, introduction, system, feature unless meaningful
+- Prefer nouns / real concepts / real actions
+- 1 core node only
+- 3 to 5 sub nodes max
+- 0 to 2 detail nodes per sub node
+- Labels must be short (1 to 4 words)
+- No duplicate meaning nodes
+- Hierarchical structure only
+- Core connects to sub nodes
+- Detail nodes connect only to their parent sub node
+- Keep graph easy to understand visually
+- No markdown
+- Valid JSON only
+
+Use this lesson source:
+{graph_context[:3500]}
+
+The graph should feel like a learning mind map, not random extraction.
+"""
+
+    stage_c_raw = run_llm_direct(stage_c_prompt)
+    stage_c_structured = extract_json_object(stage_c_raw)
+
+    if not stage_c_structured:
+        repair_graph_prompt = f"""
+Convert this to valid JSON only, with schema:
+{{
+  "nodes": [{{"id":"1","label":"Main Topic","type":"core"}}],
+  "edges": [{{"from":"1","to":"2"}}]
+}}
+
+Text:
+{stage_c_raw}
+"""
+        repaired_graph = run_llm_direct(repair_graph_prompt)
+        stage_c_structured = extract_json_object(repaired_graph)
+
+    graph_data = _normalize_visual_graph(stage_c_structured, topic)
+
     return {
         "step": idx_topic + 1,
         "pdf_index": idx_pdf,
@@ -749,7 +1036,8 @@ Key concepts:
         "canvas": stage_a["canvas"],
         "voice": {
             "script": voice_script
-        }
+        },
+        "visual_graph": graph_data
     }
 # --- New teaching start: fetch topics from DB, no similarity_search ---
 @app.post("/sessions/{session_id}/teach/start")
