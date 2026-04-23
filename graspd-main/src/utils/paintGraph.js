@@ -1,183 +1,152 @@
 import { createShapeId, toRichText } from 'tldraw'
+import { getNodeSize } from './graphLayout'
 
 const TYPE_STYLES = {
-  core:   { color: 'green',  size: 'l', fill: 'solid' },
-  sub:    { color: 'blue',   size: 'm', fill: 'semi'  },
-  detail: { color: 'orange', size: 's', fill: 'none'  },
+  core:   { color: 'violet', fill: 'solid' },
+  sub:    { color: 'blue',   fill: 'semi'  },
+  detail: { color: 'grey',   fill: 'none'  },
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value))
+const TYPE_TEXT_SIZE = {
+  core:   'm',
+  sub:    's',
+  detail: 's',
 }
 
-function nodeSizeFromType(type) {
-  if (type === 'core') return { w: 210, h: 68 }
-  if (type === 'sub') return { w: 175, h: 56 }
-  return { w: 150, h: 50 }
+function wrapLabel(label, maxCharsPerLine = 14) {
+  const words = String(label || '').trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return ''
+
+  let line1 = ''
+  let line2 = ''
+
+  for (let i = 0; i < words.length; i++) {
+    const candidate = line1 ? `${line1} ${words[i]}` : words[i]
+    if (!line1 || candidate.length <= maxCharsPerLine) {
+      line1 = candidate
+    } else {
+      line2 = words.slice(i).join(' ')
+      break
+    }
+  }
+
+  if (!line2) return line1
+
+  if (line2.length > maxCharsPerLine) {
+    line2 = line2.slice(0, maxCharsPerLine - 1).trimEnd() + '…'
+  }
+
+  return `${line1}\n${line2}`
 }
 
-function getDensityScale(nodeCount) {
-  if (nodeCount >= 8) return 0.84
-  if (nodeCount >= 6) return 0.9
-  return 1
-}
+function rectEdgePoint(node, target) {
+  const { w, h } = getNodeSize(node)
+  const cx = node.x + w / 2
+  const cy = node.y + h / 2
+  const dx = target.x - cx
+  const dy = target.y - cy
 
-function getFontSizeToken(labelLength, type, effectiveScale) {
-  const compact = effectiveScale < 0.88
-  if (labelLength > 20 || compact) return 's'
-  if (type === 'core' && labelLength <= 12 && effectiveScale >= 0.98) return 'l'
-  return 'm'
-}
+  if (dx === 0 && dy === 0) return { x: cx, y: cy }
 
-export function getNodeRenderMetrics(node, options = {}) {
-  const nodeCount = options.nodeCount || 1
-  const scale = Number.isFinite(options.scale) ? options.scale : 1
-  const densityScale = getDensityScale(nodeCount)
-  const effectiveScale = clamp(scale * densityScale, 0.68, 1)
-
-  const base = nodeSizeFromType(node.type)
-  const labelLength = String(node.label || '').trim().length
-  const widthBoost = labelLength > 22 ? 1.08 : (labelLength > 16 ? 1.03 : 1)
+  const tx = w / 2 / Math.abs(dx || 1e-9)
+  const ty = h / 2 / Math.abs(dy || 1e-9)
+  const t  = Math.min(tx, ty)
 
   return {
-    w: Math.round(base.w * effectiveScale * widthBoost),
-    h: Math.round(base.h * effectiveScale),
-    textSize: getFontSizeToken(labelLength, node.type, effectiveScale),
-    effectiveScale,
+    x: cx + dx * t,
+    y: cy + dy * t,
   }
 }
 
-export function getGraphBounds(positioned, options = {}) {
-  const entries = Object.values(positioned || {})
-  if (!entries.length) {
-    return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 }
-  }
-
-  let minX = Number.POSITIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  const nodeCount = entries.length
-  entries.forEach((node) => {
-    const metrics = getNodeRenderMetrics(node, { ...options, nodeCount })
-    minX = Math.min(minX, node.x)
-    minY = Math.min(minY, node.y)
-    maxX = Math.max(maxX, node.x + metrics.w)
-    maxY = Math.max(maxY, node.y + metrics.h)
-  })
-
-  return {
-    minX,
-    minY,
-    maxX,
-    maxY,
-    width: Math.max(1, maxX - minX),
-    height: Math.max(1, maxY - minY),
-  }
-}
-
-function getArrowAnchor(fromNode, toNode, fromMetrics, toMetrics) {
-  const fromCenter = {
-    x: fromNode.x + fromMetrics.w / 2,
-    y: fromNode.y + fromMetrics.h / 2,
-  }
-  const toCenter = {
-    x: toNode.x + toMetrics.w / 2,
-    y: toNode.y + toMetrics.h / 2,
-  }
-
-  const dx = toCenter.x - fromCenter.x
-  const dy = toCenter.y - fromCenter.y
-  const length = Math.hypot(dx, dy) || 1
-
-  const ux = dx / length
-  const uy = dy / length
-
-  const fromInset = Math.min(fromMetrics.w, fromMetrics.h) * 0.38
-  const toInset = Math.min(toMetrics.w, toMetrics.h) * 0.42
-
-  return {
-    start: {
-      x: fromCenter.x + ux * fromInset,
-      y: fromCenter.y + uy * fromInset,
-    },
-    end: {
-      x: toCenter.x - ux * toInset,
-      y: toCenter.y - uy * toInset,
-    },
-  }
+function nodeCenter(node) {
+  const { w, h } = getNodeSize(node)
+  return { x: node.x + w / 2, y: node.y + h / 2 }
 }
 
 export function paintGraph(editor, { positioned, edges }, options = {}) {
-  const createdShapeIds = []
-  const idMap = {}
-  const nodeEntries = Object.values(positioned || {})
-  const nodeCount = nodeEntries.length
-  const scale = Number.isFinite(options.scale) ? options.scale : 1
+  const createdIds = []
+  const idMap      = {}
 
-  Object.keys(positioned).forEach(gId => {
-    idMap[gId] = createShapeId()
-  })
+  const nodes = Object.values(positioned || {})
+  if (!nodes.length) return createdIds
+
+  Object.keys(positioned).forEach(gid => { idMap[gid] = createShapeId() })
 
   editor.run(() => {
-    // 1. Draw edges first
-    edges.forEach(edge => {
-      const fromNode = positioned[edge.from]
-      const toNode   = positioned[edge.to]
+    // Draw edges first (behind nodes)
+    ;(edges || []).forEach(edge => {
+      const fromNode = positioned[String(edge.from)]
+      const toNode   = positioned[String(edge.to)]
       if (!fromNode || !toNode) return
 
-      const arrowId = createShapeId()
-      createdShapeIds.push(arrowId)
+      const toCenter   = nodeCenter(toNode)
+      const fromCenter = nodeCenter(fromNode)
+      const start      = rectEdgePoint(fromNode, toCenter)
+      const end        = rectEdgePoint(toNode,   fromCenter)
 
-      const fromMetrics = getNodeRenderMetrics(fromNode, { nodeCount, scale })
-      const toMetrics = getNodeRenderMetrics(toNode, { nodeCount, scale })
-      const anchors = getArrowAnchor(fromNode, toNode, fromMetrics, toMetrics)
+      const arrowId = createShapeId()
+      createdIds.push(arrowId)
 
       editor.createShape({
-        id: arrowId,
+        id:   arrowId,
         type: 'arrow',
         props: {
-          start: anchors.start,
-          end: anchors.end,
+          start,
+          end,
           color:          'grey',
+          size:           's',
           arrowheadEnd:   'arrow',
           arrowheadStart: 'none',
+          bend:           0,
         },
       })
     })
 
-    // 2. Draw nodes
-    Object.entries(positioned).forEach(([gId, node]) => {
-      const style = TYPE_STYLES[node.type] || TYPE_STYLES.detail
-      const metrics = getNodeRenderMetrics(node, { nodeCount, scale })
+    // Draw nodes
+    nodes.forEach(node => {
+      const gid   = String(node.id)
+      const style = TYPE_STYLES[node.type]    || TYPE_STYLES.detail
+      const tSize = TYPE_TEXT_SIZE[node.type] || 's'
+      const { w, h } = getNodeSize(node)
+
+      const charPx       = tSize === 'm' ? 8 : 7
+      const maxChars     = Math.max(8, Math.floor((w - 16) / charPx))
+      const wrappedLabel = wrapLabel(node.label, maxChars)
+
+      // Core nodes use ellipse, others use rectangle
+      const geo    = node.type === 'core' ? 'ellipse' : 'rectangle'
+      const shapeW = node.type === 'core' ? w * 1.15 : w
+      const shapeH = node.type === 'core' ? h * 1.30 : h
+      const shapeX = node.type === 'core' ? node.x - (shapeW - w) / 2 : node.x
+      const shapeY = node.type === 'core' ? node.y - (shapeH - h) / 2 : node.y
 
       editor.createShape({
-        id:   idMap[gId],
+        id:   idMap[gid],
         type: 'geo',
-        x:    node.x,
-        y:    node.y,
+        x:    shapeX,
+        y:    shapeY,
         props: {
-          geo:      'rectangle',
-          w: metrics.w,
-          h: metrics.h,
-          richText: toRichText(node.label),
+          geo,
+          w:        shapeW,
+          h:        shapeH,
+          richText: toRichText(wrappedLabel),
           color:    style.color,
-          size:     metrics.textSize,
+          size:     tSize,
           fill:     style.fill,
+          font:     'sans',
+          align:    'middle',
         },
       })
 
-      createdShapeIds.push(idMap[gId])
+      createdIds.push(idMap[gid])
     })
   })
 
-  // Zoom to fit with padding
   if (options.autoFit !== false) {
-    setTimeout(() => {
-      editor.zoomToFit({ animation: { duration: 600 } })
-    }, 100)
+    setTimeout(() => editor.zoomToFit({ animation: { duration: 500 } }), 80)
   }
 
-  return createdShapeIds
+  return createdIds
 }
+
+export { getGraphBounds } from './graphLayout'

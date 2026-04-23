@@ -3,7 +3,7 @@ import { Box, toRichText } from '@tldraw/editor'
 import { createShapeId } from 'tldraw'
 import { generateSpeech, createSpeechPlayer } from '../services/tts'
 import { layoutGraph } from '../utils/graphLayout'
-import { paintGraph, getGraphBounds } from '../utils/paintGraph'
+import { paintGraph } from '../utils/paintGraph'
 
 const BACKEND_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -126,9 +126,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
     const viewportWidth = Math.round(viewportBounds?.w || window.innerWidth || 1280)
     const viewportHeight = Math.round(viewportBounds?.h || window.innerHeight || 720)
 
-    // Keep a predictable frame so the whole slide remains visible at z=1.
     const horizontalPadding = Math.round(viewportWidth * 0.03)
-    // Reserve space for the floating toolbar + teaching status strip.
     const topPadding = Math.round(viewportHeight * 0.095)
     const bottomPadding = Math.round(viewportHeight * 0.065)
     const usableWidth = Math.max(1, viewportWidth - horizontalPadding * 2)
@@ -157,7 +155,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
     const content = step.canvas.content || ''
     const points = step.canvas.important_points || []
 
-    // 🟫 Subtle border (Gamma feel)
+    // Subtle border
     const borderId = createShapeId()
     slideShapeIdsRef.current.push(borderId)
     ed.createShape({
@@ -176,7 +174,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       },
     })
 
-    // ⬛ Main slide
+    // Main slide background
     const slideId = createShapeId()
     slideShapeIdsRef.current.push(slideId)
     ed.createShape({
@@ -195,7 +193,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       },
     })
 
-    // Vertical divider for split layout
+    // Vertical divider
     const splitDividerId = createShapeId()
     slideShapeIdsRef.current.push(splitDividerId)
     ed.createShape({
@@ -224,7 +222,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       y: topContentY,
       props: {
         richText: toRichText(step.canvas.title || step.topic || 'Untitled'),
-          color: 'white',
+        color: 'white',
         size: 'xl',
         font: 'serif',
         w: textWidth,
@@ -232,7 +230,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       },
     })
 
-    // ➖ Divider
+    // Divider line under title
     const dividerId = createShapeId()
     slideShapeIdsRef.current.push(dividerId)
     ed.createShape({
@@ -251,7 +249,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       },
     })
 
-    // 📄 Content
+    // Content text
     const contentId = createShapeId()
     slideShapeIdsRef.current.push(contentId)
     ed.createShape({
@@ -261,7 +259,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       y: topContentY + 90,
       props: {
         richText: toRichText(content),
-          color: 'white',
+        color: 'white',
         size: 'l',
         font: 'sans',
         w: textWidth,
@@ -315,8 +313,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
 
     textStreamRef.current = null
 
-    // Voice playback already kicked off in parallel with typing.
-
+    // Key points
     if (points.length > 0) {
       const keyPointsWidth = Math.max(220, textWidth - 20)
 
@@ -329,7 +326,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
         y: yStart + Math.round(SLIDE_HEIGHT * 0.56),
         props: {
           richText: toRichText('Key Points'),
-            color: 'white',
+          color: 'white',
           size: 'l',
           font: 'serif',
           w: textWidth,
@@ -346,7 +343,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
         y: yStart + Math.round(SLIDE_HEIGHT * 0.62),
         props: {
           richText: toRichText(points.map(p => `• ${p}`).join('\n')),
-            color: 'white',
+          color: 'white',
           size: 's',
           font: 'sans',
           w: keyPointsWidth,
@@ -376,50 +373,30 @@ export default function useTeaching(sessionId, editor, options = {}) {
     // Right panel graph rendering
     if (step.visual_graph?.nodes?.length) {
       try {
-        const laidOut = layoutGraph(step.visual_graph)
-        const positioned = laidOut?.positioned || {}
-        const positionedEntries = Object.entries(positioned)
+        const panelPaddingLeft   = 24
+        const panelPaddingRight  = 24
+        const panelPaddingTop    = 90
+        const panelPaddingBottom = 32
 
-        if (positionedEntries.length) {
-          const dividerSafeInset = 10
-          const panelPaddingX = 26
-          const panelPaddingTop = 95
-          const panelPaddingBottom = 24
+        const graphAreaX = rightPanelX + panelPaddingLeft
+        const graphAreaY = yStart      + panelPaddingTop
+        const graphAreaW = Math.max(140, rightPanelWidth  - panelPaddingLeft - panelPaddingRight)
+        const graphAreaH = Math.max(140, SLIDE_HEIGHT     - panelPaddingTop  - panelPaddingBottom)
 
-          const graphAreaX = rightPanelX + panelPaddingX + dividerSafeInset
-          const graphAreaY = yStart + panelPaddingTop
-          const graphAreaW = Math.max(170, rightPanelWidth - (panelPaddingX * 2) - dividerSafeInset)
-          const graphAreaH = Math.max(170, SLIDE_HEIGHT - panelPaddingTop - panelPaddingBottom)
+        // Layout in local panel space — coordinates are relative to graphAreaX/Y
+        const laidOut = layoutGraph(step.visual_graph, { w: graphAreaW, h: graphAreaH })
 
-          const nodeCount = positionedEntries.length
-          const denseScale = nodeCount >= 8 ? 0.88 : (nodeCount >= 6 ? 0.94 : 1)
-          const initialBounds = getGraphBounds(positioned, { scale: denseScale })
-
-          const fitScale = Math.min(
-            graphAreaW / Math.max(1, initialBounds.width),
-            graphAreaH / Math.max(1, initialBounds.height),
-            1
-          )
-          const renderScale = Math.min(1, fitScale * denseScale)
-
-          const sourceCenterX = initialBounds.minX + initialBounds.width / 2
-          const sourceCenterY = initialBounds.minY + initialBounds.height / 2
-          const targetCenterX = graphAreaX + graphAreaW / 2
-          const targetCenterY = graphAreaY + graphAreaH / 2
-
-          const shifted = {}
-          positionedEntries.forEach(([id, node]) => {
-            shifted[id] = {
-              ...node,
-              x: (node.x - sourceCenterX) * fitScale + targetCenterX,
-              y: (node.y - sourceCenterY) * fitScale + targetCenterY,
-            }
+        if (Object.keys(laidOut.positioned).length) {
+          // Translate from local panel space to canvas space
+          const translated = {}
+          Object.entries(laidOut.positioned).forEach(([id, node]) => {
+            translated[id] = { ...node, x: node.x + graphAreaX, y: node.y + graphAreaY }
           })
 
           const graphShapeIds = paintGraph(
             ed,
-            { positioned: shifted, edges: laidOut.edges || [] },
-            { autoFit: false, scale: renderScale }
+            { positioned: translated, edges: laidOut.edges },
+            { autoFit: false }
           )
           if (Array.isArray(graphShapeIds) && graphShapeIds.length) {
             slideShapeIdsRef.current.push(...graphShapeIds)
@@ -430,7 +407,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
       }
     }
 
-    // Reframe from any previous pan/zoom and reserve top safe space for the teaching status strip.
+    // Reframe camera to fit the slide
     if (typeof ed.zoomToBounds === 'function') {
       const fitTopInset = Math.round(viewportHeight * 0.04)
       const fitBottomInset = Math.round(viewportHeight * 0.0001)
@@ -440,9 +417,9 @@ export default function useTeaching(sessionId, editor, options = {}) {
         slideFrameBounds.w,
         slideFrameBounds.h + fitTopInset + fitBottomInset
       )
-
       ed.zoomToBounds(cameraFitBounds, { animation: { duration: 320 } })
     }
+
     return speechDone
   }
 
