@@ -132,7 +132,7 @@ export default function useTeaching(sessionId, editor, options = {}) {
     const usableWidth = Math.max(1, viewportWidth - horizontalPadding * 2)
     const usableHeight = Math.max(1, viewportHeight - topPadding - bottomPadding)
 
-    const slideAspectRatio = 16 / 9
+    const slideAspectRatio = 18 / 9
     const widthByHeight = usableHeight * slideAspectRatio
     const SLIDE_WIDTH = Math.round(Math.min(usableWidth, widthByHeight))
     const SLIDE_HEIGHT = Math.round((SLIDE_WIDTH / slideAspectRatio) * 0.97)
@@ -189,25 +189,6 @@ export default function useTeaching(sessionId, editor, options = {}) {
         fill: 'semi',
         color: 'black',
         size: 'm',
-        dash: 'solid',
-      },
-    })
-
-    // Vertical divider
-    const splitDividerId = createShapeId()
-    slideShapeIdsRef.current.push(splitDividerId)
-    ed.createShape({
-      id: splitDividerId,
-      type: 'geo',
-      x: rightPanelX,
-      y: yStart + 26,
-      props: {
-        geo: 'rectangle',
-        w: 2,
-        h: Math.max(10, SLIDE_HEIGHT - 52),
-        fill: 'solid',
-        color: 'grey',
-        size: 's',
         dash: 'solid',
       },
     })
@@ -352,30 +333,12 @@ export default function useTeaching(sessionId, editor, options = {}) {
       })
     }
 
-    // Right panel title
-    const graphTitleId = createShapeId()
-    slideShapeIdsRef.current.push(graphTitleId)
-    ed.createShape({
-      id: graphTitleId,
-      type: 'text',
-      x: rightPanelX + 28,
-      y: yStart + 42,
-      props: {
-        richText: toRichText('Concept Graph'),
-        color: 'white',
-        size: 'l',
-        font: 'serif',
-        w: Math.max(220, rightPanelWidth - 56),
-        autoSize: false,
-      },
-    })
-
     // Right panel graph rendering
     if (step.visual_graph?.nodes?.length) {
       try {
         const panelPaddingLeft   = 24
         const panelPaddingRight  = 24
-        const panelPaddingTop    = 90
+        const panelPaddingTop    = 44
         const panelPaddingBottom = 32
 
         const graphAreaX = rightPanelX + panelPaddingLeft

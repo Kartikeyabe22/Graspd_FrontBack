@@ -1,7 +1,7 @@
 const TYPE_BASE = {
-  core:   { w: 110, h: 38 },
-  sub:    { w:  90, h: 32 },
-  detail: { w:  76, h: 28 },
+  core:   { w: 120, h: 42 },
+  sub:    { w: 100, h: 36 },
+  detail: { w:  86, h: 30 },
 }
 
 export function getNodeSize(node) {
@@ -15,36 +15,91 @@ export function getNodeSize(node) {
   }
 }
 
-function nodeRect(node) {
-  const { w, h } = getNodeSize(node)
-  return { x: node.x, y: node.y, w, h }
-}
+// ─── Full-pass pair separation ────────────────────────────────────────────────
+// Works in unlimited space — no clamping here — so nodes are never trapped.
 
-function rectsOverlap(a, b, pad = 14) {
-  return !(
-    a.x + a.w + pad < b.x ||
-    b.x + b.w + pad < a.x ||
-    a.y + a.h + pad < b.y ||
-    b.y + b.h + pad < a.y
-  )
-}
+function separateAll(posMap) {
+  const ids  = Object.keys(posMap)
+  const GAP  = 12
+  const PASSES = 120
 
-function resolveCollision(candidate, positioned, cx, cy) {
-  const placed = Object.values(positioned)
-  for (let iter = 0; iter < 40; iter++) {
-    const r   = nodeRect(candidate)
-    const hit = placed.find(p => p !== candidate && rectsOverlap(r, nodeRect(p), 14))
-    if (!hit) break
-    const angle = Math.atan2(candidate.y - cy, candidate.x - cx)
-    const step  = 18 + iter * 3
-    candidate = {
-      ...candidate,
-      x: candidate.x + Math.cos(angle) * step,
-      y: candidate.y + Math.sin(angle) * step,
+  for (let pass = 0; pass < PASSES; pass++) {
+    let moved = false
+
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a   = posMap[ids[i]]
+        const b   = posMap[ids[j]]
+        const aSz = getNodeSize(a)
+        const bSz = getNodeSize(b)
+
+        const overlapX = Math.min(a.x + aSz.w, b.x + bSz.w) - Math.max(a.x, b.x)
+        const overlapY = Math.min(a.y + aSz.h, b.y + bSz.h) - Math.max(a.y, b.y)
+
+        if (overlapX <= 0 || overlapY <= 0) continue
+
+        moved = true
+        const pushX = overlapX + GAP
+        const pushY = overlapY + GAP
+
+        if (pushX <= pushY) {
+          const half = pushX / 2
+          const dir  = a.x <= b.x ? -1 : 1
+          posMap[ids[i]] = { ...a, x: a.x + dir * half }
+          posMap[ids[j]] = { ...b, x: b.x - dir * half }
+        } else {
+          const half = pushY / 2
+          const dir  = a.y <= b.y ? -1 : 1
+          posMap[ids[i]] = { ...a, y: a.y + dir * half }
+          posMap[ids[j]] = { ...b, y: b.y - dir * half }
+        }
+      }
     }
+
+    if (!moved) break
   }
-  return candidate
 }
+
+// ─── Scale + center the laid-out graph to fit inside the panel ───────────────
+
+function fitToPanel(posMap, PW, PH) {
+  const PADDING = 16
+  const ids = Object.keys(posMap)
+  if (!ids.length) return
+
+  // Compute bounding box of all nodes (including their sizes)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  ids.forEach(id => {
+    const n      = posMap[id]
+    const { w, h } = getNodeSize(n)
+    minX = Math.min(minX, n.x)
+    minY = Math.min(minY, n.y)
+    maxX = Math.max(maxX, n.x + w)
+    maxY = Math.max(maxY, n.y + h)
+  })
+
+  const graphW = maxX - minX
+  const graphH = maxY - minY
+
+  const availW = PW - PADDING * 2
+  const availH = PH - PADDING * 2
+
+  // Keep 1:1 spacing so collision-free layout does not re-overlap after fitting.
+  // We only translate the graph to panel center instead of scaling coordinates.
+  const offsetX  = PADDING + (availW - graphW) / 2
+  const offsetY  = PADDING + (availH - graphH) / 2
+
+  ids.forEach(id => {
+    const n = posMap[id]
+    posMap[id] = {
+      ...n,
+      x: (n.x - minX) + offsetX,
+      y: (n.y - minY) + offsetY,
+    }
+  })
+}
+
+// ─── Main layout ──────────────────────────────────────────────────────────────
 
 export function layoutGraph(data = {}, panel = { w: 360, h: 400 }) {
   const nodes = Array.isArray(data.nodes) ? data.nodes : []
@@ -52,6 +107,7 @@ export function layoutGraph(data = {}, panel = { w: 360, h: 400 }) {
 
   if (!nodes.length) return { positioned: {}, edges: [] }
 
+  // Build node map
   const nodeMap = {}
   nodes.forEach((n, i) => {
     const id = String(n?.id ?? i + 1)
@@ -66,6 +122,7 @@ export function layoutGraph(data = {}, panel = { w: 360, h: 400 }) {
   const coreNode = nodes.find(n => n?.type === 'core') || nodes[0]
   const coreId   = String(coreNode?.id ?? '1')
 
+  // Sub nodes
   const subIds = edges
     .filter(e => String(e?.from) === coreId && nodeMap[String(e?.to)])
     .map(e => String(e.to))
@@ -78,86 +135,99 @@ export function layoutGraph(data = {}, panel = { w: 360, h: 400 }) {
       .forEach(id => subIds.push(id))
   }
 
+  // Detail nodes per sub
   const detailMap = {}
   subIds.forEach(subId => {
     detailMap[subId] = edges
       .filter(e => String(e?.from) === subId && nodeMap[String(e?.to)])
       .map(e => String(e.to))
-      .filter((id, i, arr) => arr.indexOf(id) === i && id !== coreId && !subIds.includes(id))
+      .filter((id, i, arr) =>
+        arr.indexOf(id) === i &&
+        id !== coreId &&
+        !subIds.includes(id)
+      )
   })
 
   const { w: PW, h: PH } = panel
-  const cx = PW / 2
-  const cy = PH / 2
 
-  const positioned = {}
+  // Use a large virtual canvas for initial placement so radii are generous
+  const VCX = 600
+  const VCY = 500
 
+  const posMap = {}
+
+  // Core at virtual centre
   const coreSize = getNodeSize(nodeMap[coreId])
-  positioned[coreId] = {
+  posMap[coreId] = {
     ...nodeMap[coreId],
-    x: cx - coreSize.w / 2,
-    y: cy - coreSize.h / 2,
+    x: VCX - coreSize.w / 2,
+    y: VCY - coreSize.h / 2,
   }
 
-  const maxSubRadius = Math.min(PW, PH) * 0.36
-  const subCount     = Math.max(1, subIds.length)
-  const subRadius    = Math.min(maxSubRadius, 90 + subCount * 20)
+  // Subs on a circle around core.
+  const subCount = Math.max(1, subIds.length)
+  const subRadius = 118 + subCount * 14
 
   subIds.forEach((subId, i) => {
-    const angle   = (Math.PI * 2 * i / subCount) - Math.PI / 2
-    const size    = getNodeSize(nodeMap[subId])
-    const rawNode = {
+    const angle = (Math.PI * 2 * i / subCount) - Math.PI / 2
+    const sz    = getNodeSize(nodeMap[subId])
+    posMap[subId] = {
       ...nodeMap[subId],
-      x: cx + subRadius * Math.cos(angle) - size.w / 2,
-      y: cy + subRadius * Math.sin(angle) - size.h / 2,
+      x: VCX + subRadius * Math.cos(angle) - sz.w / 2,
+      y: VCY + subRadius * Math.sin(angle) - sz.h / 2,
     }
-    positioned[subId] = resolveCollision(rawNode, positioned, cx, cy)
+  })
 
-    const details   = detailMap[subId] || []
+  // Details placed outward from their parent sub
+  subIds.forEach((subId, i) => {
+    const details = detailMap[subId] || []
+    if (!details.length) return
+
+    const subAngle  = (Math.PI * 2 * i / subCount) - Math.PI / 2
+    const parent    = posMap[subId]
+    const subSz     = getNodeSize(nodeMap[subId])
+    const pcx       = parent.x + subSz.w / 2
+    const pcy       = parent.y + subSz.h / 2
     const dc        = details.length
-    if (!dc) return
-
-    const fanSpread = Math.min(Math.PI * 0.7, 0.3 + dc * 0.25)
-    const fanStart  = angle - fanSpread / 2
+    const detailRad = 88 + dc * 10
+    const fanSpread = Math.min(Math.PI * 0.55, 0.4 + dc * 0.2)
+    const fanStart  = subAngle - fanSpread / 2
     const fanStep   = dc > 1 ? fanSpread / (dc - 1) : 0
-    const detailRad = subRadius * 0.52 + dc * 10
 
     details.forEach((detId, di) => {
-      const da     = fanStart + fanStep * di
-      const dSize  = getNodeSize(nodeMap[detId])
-      const parent = positioned[subId]
-      const pcx    = parent.x + getNodeSize(nodeMap[subId]).w / 2
-      const pcy    = parent.y + getNodeSize(nodeMap[subId]).h / 2
-      const rawDet = {
+      const angle = dc === 1 ? subAngle : fanStart + fanStep * di
+      const sz    = getNodeSize(nodeMap[detId])
+      posMap[detId] = {
         ...nodeMap[detId],
-        x: pcx + detailRad * Math.cos(da) - dSize.w / 2,
-        y: pcy + detailRad * Math.sin(da) - dSize.h / 2,
+        x: pcx + detailRad * Math.cos(angle) - sz.w / 2,
+        y: pcy + detailRad * Math.sin(angle) - sz.h / 2,
       }
-      positioned[detId] = resolveCollision(rawDet, positioned, cx, cy)
     })
   })
 
-  let fallbackCol = 0
+  // Orphan fallback
+  let col = 0
   Object.keys(nodeMap).forEach(id => {
-    if (positioned[id]) return
-    const size = getNodeSize(nodeMap[id])
-    const raw  = {
+    if (posMap[id]) return
+    const sz = getNodeSize(nodeMap[id])
+    posMap[id] = {
       ...nodeMap[id],
-      x: 20 + fallbackCol * (size.w + 16),
-      y: PH - size.h - 20,
+      x: VCX - 200 + col * (sz.w + 20),
+      y: VCY + 300,
     }
-    positioned[id] = resolveCollision(raw, positioned, cx, cy)
-    fallbackCol++
+    col++
   })
 
-  const MARGIN = 12
-  Object.values(positioned).forEach(node => {
-    const { w, h } = getNodeSize(node)
-    node.x = Math.max(MARGIN, Math.min(node.x, PW - w - MARGIN))
-    node.y = Math.max(MARGIN, Math.min(node.y, PH - h - MARGIN))
-  })
+  // Step 1: separate all overlapping nodes (unlimited space)
+  separateAll(posMap)
 
-  return { positioned, edges }
+  // Step 2: scale + center the whole graph to fit inside the panel
+  fitToPanel(posMap, PW, PH)
+
+  // Step 3: final overlap cleanup in panel coordinates.
+  separateAll(posMap)
+
+  return { positioned: posMap, edges }
 }
 
 export function getGraphBounds(positioned) {
@@ -174,3 +244,4 @@ export function getGraphBounds(positioned) {
   })
   return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
 }
+

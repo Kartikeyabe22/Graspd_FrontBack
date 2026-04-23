@@ -2,15 +2,13 @@ import { createShapeId, toRichText } from 'tldraw'
 import { getNodeSize } from './graphLayout'
 
 const TYPE_STYLES = {
-  core:   { color: 'violet', fill: 'solid' },
-  sub:    { color: 'blue',   fill: 'semi'  },
-  detail: { color: 'grey',   fill: 'none'  },
+  core: { color: 'violet', fill: 'solid' },
+  sub:  { color: 'blue',   fill: 'semi'  },
 }
 
 const TYPE_TEXT_SIZE = {
-  core:   'm',
-  sub:    's',
-  detail: 's',
+  core: 'm',
+  sub:  's',
 }
 
 function wrapLabel(label, maxCharsPerLine = 14) {
@@ -39,25 +37,6 @@ function wrapLabel(label, maxCharsPerLine = 14) {
   return `${line1}\n${line2}`
 }
 
-function rectEdgePoint(node, target) {
-  const { w, h } = getNodeSize(node)
-  const cx = node.x + w / 2
-  const cy = node.y + h / 2
-  const dx = target.x - cx
-  const dy = target.y - cy
-
-  if (dx === 0 && dy === 0) return { x: cx, y: cy }
-
-  const tx = w / 2 / Math.abs(dx || 1e-9)
-  const ty = h / 2 / Math.abs(dy || 1e-9)
-  const t  = Math.min(tx, ty)
-
-  return {
-    x: cx + dx * t,
-    y: cy + dy * t,
-  }
-}
-
 function nodeCenter(node) {
   const { w, h } = getNodeSize(node)
   return { x: node.x + w / 2, y: node.y + h / 2 }
@@ -73,16 +52,15 @@ export function paintGraph(editor, { positioned, edges }, options = {}) {
   Object.keys(positioned).forEach(gid => { idMap[gid] = createShapeId() })
 
   editor.run(() => {
-    // Draw edges first (behind nodes)
+
+    // --- Draw edges first (behind everything) ---
     ;(edges || []).forEach(edge => {
       const fromNode = positioned[String(edge.from)]
       const toNode   = positioned[String(edge.to)]
       if (!fromNode || !toNode) return
 
-      const toCenter   = nodeCenter(toNode)
       const fromCenter = nodeCenter(fromNode)
-      const start      = rectEdgePoint(fromNode, toCenter)
-      const end        = rectEdgePoint(toNode,   fromCenter)
+      const toCenter   = nodeCenter(toNode)
 
       const arrowId = createShapeId()
       createdIds.push(arrowId)
@@ -90,22 +68,57 @@ export function paintGraph(editor, { positioned, edges }, options = {}) {
       editor.createShape({
         id:   arrowId,
         type: 'arrow',
+        x:    0,
+        y:    0,
         props: {
-          start,
-          end,
+          kind:           'arc',
+          start:          { x: fromCenter.x, y: fromCenter.y },
+          end:            { x: toCenter.x,   y: toCenter.y   },
+          bend:           0,
           color:          'grey',
           size:           's',
-          arrowheadEnd:   'arrow',
+          fill:           'none',
+          dash:           'solid',
           arrowheadStart: 'none',
-          bend:           0,
+          arrowheadEnd:   'arrow',
+          font:           'sans',
+          richText:       toRichText(''),
+          labelPosition:  0.5,
+          scale:          1,
+          labelColor:     'black',
+          elbowMidPoint:  0.5,
         },
       })
     })
 
-    // Draw nodes
+    // --- Draw nodes ---
     nodes.forEach(node => {
-      const gid   = String(node.id)
-      const style = TYPE_STYLES[node.type]    || TYPE_STYLES.detail
+      const gid = String(node.id)
+
+      // Detail nodes: plain text only, no box
+      if (node.type === 'detail') {
+        const label = String(node.label || '').trim()
+        editor.createShape({
+          id:   idMap[gid],
+          type: 'text',
+          x:    node.x,
+          y:    node.y,
+          props: {
+            richText: toRichText(label),
+            color:    'red',
+            size:     's',
+            font:     'sans',
+            textAlign: 'middle',
+            autoSize: true,
+            scale:    1,
+          },
+        })
+        createdIds.push(idMap[gid])
+        return
+      }
+
+      // Core and sub nodes: draw as geo shapes
+      const style = TYPE_STYLES[node.type] || TYPE_STYLES.sub
       const tSize = TYPE_TEXT_SIZE[node.type] || 's'
       const { w, h } = getNodeSize(node)
 
@@ -113,7 +126,6 @@ export function paintGraph(editor, { positioned, edges }, options = {}) {
       const maxChars     = Math.max(8, Math.floor((w - 16) / charPx))
       const wrappedLabel = wrapLabel(node.label, maxChars)
 
-      // Core nodes use ellipse, others use rectangle
       const geo    = node.type === 'core' ? 'ellipse' : 'rectangle'
       const shapeW = node.type === 'core' ? w * 1.15 : w
       const shapeH = node.type === 'core' ? h * 1.30 : h
@@ -127,14 +139,20 @@ export function paintGraph(editor, { positioned, edges }, options = {}) {
         y:    shapeY,
         props: {
           geo,
-          w:        shapeW,
-          h:        shapeH,
-          richText: toRichText(wrappedLabel),
-          color:    style.color,
-          size:     tSize,
-          fill:     style.fill,
-          font:     'sans',
-          align:    'middle',
+          w:             shapeW,
+          h:             shapeH,
+          richText:      toRichText(wrappedLabel),
+          color:         style.color,
+          size:          tSize,
+          fill:          style.fill,
+          font:          'sans',
+          align:         'middle',
+          verticalAlign: 'middle',
+          dash:          'solid',
+          labelColor:    'black',
+          url:           '',
+          scale:         1,
+          growY:         0,
         },
       })
 
