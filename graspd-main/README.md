@@ -1,189 +1,117 @@
-ChatPanel.jsx
-    Main chat system (core logic)
-    Takes user input and sends to AI
-    Receives AI response and updates UI
-    Sends canvas shapes + history to backend
-    Handles file upload (image/pdf)
-MessageBubble.jsx
-    Displays each chat message
-    Handles user vs AI message UI
-    Renders AI response (text + resources)
-    Uses structured response (type, message, resources)
-    No API logic
-ResourceCard.jsx
-    Displays resource links (YouTube/article)
-    Shows title + clickable link
-    Button to send resource to canvas
-    Uses resource {kind, title, url}
-    Pure UI
-services/gemini.js
-    Handles AI calls (main API layer)
-    Sends message + history + canvas context
-    Builds prompt for AI
-    Returns structured JSON response
-    Will be replaced by FastAPI
-storage.js
-    Stores chat history in browser
-    Uses localStorage
-    Save, get, delete chat per page
-    Not shared across users
-    Temporary (replace with backend later)
-HistoryItem.jsx
-    Shows one chat session in sidebar
-    Displays topic + time
-    Handles click (switch session)
-    Handles delete session
-    Uses session {id, topic, createdAt}
-HistoryPanel.jsx
-    Stores and displays session history by fetching sessions using getHistory() and grouping them (Today, Yesterday, etc.)
+# graspd
 
-    Creates a new canvas/session using editor.createPage() and saves it with saveSession()
+graspd is an AI-powered learning canvas for turning a topic into a structured knowledge graph, then exploring it through an editable infinite canvas. Users can sign up, log in, generate a graph from a prompt, and continue refining the canvas with AI-assisted explanations and resources.
 
-    Handles switching between sessions by loading the correct canvas when a user selects a history item
+The app is built with React, Vite, and tldraw on the frontend, and it expects a separate backend for authentication and session-aware chat. Gemini powers the graph generation and tutor responses.
 
-    Deletes sessions by removing them from both the UI history and the canvas editor
+## What It Does
 
-    Controls UI behavior like collapsing/expanding the sidebar and showing an empty state when no history exists
-Canvas.jsx
-    Manages the main canvas layout by combining the drawing area, history panel, and chat panel
+- Generates detailed knowledge graphs from a topic prompt.
+- Renders the graph directly on an editable tldraw canvas.
+- Supports authenticated access to the canvas experience.
+- Lets the AI tutor answer questions in the context of the current canvas.
+- Surfaces relevant resources and supports file-aware prompts through the chat layer.
 
-    Initializes the tldraw editor and stores it in state when the canvas mounts
+## Core Experience
 
-    Controls chat panel visibility (open/close) using state
+1. Visit the landing page to see the product overview and feature demos.
+2. Register or log in to access the protected canvas route.
+3. Enter a topic and generate a graph with AI.
+4. Move, resize, and extend the generated nodes on the canvas.
+5. Ask the tutor follow-up questions or request deeper subgraphs.
 
-    Tracks the currently active session and updates it when a session changes
+## Tech Stack
 
-    Handles layout adjustments when the history panel is collapsed or expanded    
+| Layer | Tech |
+| --- | --- |
+| Frontend | React 18, Vite, React Router |
+| Canvas | tldraw |
+| AI | Google Gemini |
+| Auth | Token-based login stored in localStorage |
+| Styling | CSS modules and global CSS |
 
-CanvasPrompt.jsx
-    Takes a topic input from the user and triggers knowledge graph generation
+## Project Structure
 
-    Calls generateKnowledgeGraph() to get AI-generated data and processes it using layout and paint functions
+```text
+graspd/
+├── src/
+│   ├── components/      # Canvas, hero, demo, and shared UI components
+│   ├── pages/           # Landing, login, register, and canvas routes
+│   ├── services/        # Gemini integration and chat helpers
+│   ├── utils/           # Auth helpers and shared utilities
+│   └── App.jsx          # App routes and protected canvas route
+├── public/
+├── package.json
+└── vite.config.js
+```
 
-    Renders the generated graph onto the canvas using the tldraw editor
+## Getting Started
 
-    Creates and saves a new session linked to the current canvas page
+### Prerequisites
 
-    Provides a button to open the chat (tutor) panel for further interaction    
+- Node.js 18 or newer
+- npm
+- A Gemini API key
+- The backend API used by the auth and chat flow
 
-cta.jsx
-    Displays a call-to-action section encouraging users to join a waitlist
+### Install Dependencies
 
-    Renders a heading, description, and an email input field
+```bash
+npm install
+```
 
-    Provides a button for users to submit their email
+### Environment Variables
 
-    Handles only UI layout and styling (no logic or API calls)
+Create a `.env` file in the project root with the variables used by the app:
 
-    Acts as a static promotional component for user onboarding
-FeatureSelection.jsx
-    Renders a reusable feature section with title, description, and bullet points
+```bash
+VITE_GEMINI_API_KEY=your_gemini_api_key
+VITE_API_URL=http://localhost:8000
+```
 
-    Displays dynamic content using props like text, colors, and icons
+`VITE_GEMINI_API_KEY` is required for graph generation and AI tutor responses. `VITE_API_URL` should point to the backend that exposes the register, login, and session chat endpoints.
 
-    Maps over a list of bullet items to show feature highlights
+### Run the App
 
-    Supports layout switching (left/right) using the flip prop
+```bash
+npm run dev
+```
 
-    Allows embedding custom demo content (like images, videos, or components)    
-Hero.jsx
-    Displays the main landing section with heading, description, and call-to-action buttons
+### Build for Production
 
-    Navigates the user to the canvas page when “try it free” is clicked
+```bash
+npm run build
+```
 
-    Shows a visual demo using the HeroMockup component
+### Preview the Production Build
 
-    Structures the layout into left (text) and right (visual) sections
+```bash
+npm run preview
+```
 
-    Acts as the entry point for users to start using the app
-HeroMockup.jsx
-    Displays a static visual mockup of the canvas interface on the landing page
+## Backend Expectations
 
-    Shows UI elements like shapes, nodes, connectors, and labels to simulate a knowledge graph
+The frontend expects a backend that can handle authentication and chat/session requests. From the current codebase, the important endpoints are:
 
-    Includes fake collaborative features like cursors, comments, and presence indicators
+- `POST /auth/register`
+- `POST /auth/token`
+- `GET /sessions/:sessionId/documents`
+- `POST /sessions/:sessionId/chat`
 
-    Represents how the actual app will look and behave without using real data or logic
+The login flow stores the returned access token in `localStorage` and uses it to guard access to the canvas route.
 
-    Acts purely as a visual/demo component to attract users      
-Nav.jsx
-    Displays the top navigation bar with logo and menu links
+## Key Features
 
-    Provides navigation links to different sections on the landing page
+- Auth-gated `/canvas` route
+- AI-generated knowledge graphs
+- Editable infinite canvas with tldraw
+- Canvas-aware tutoring
+- File-aware chat support
+- Landing page demos for the main product features
 
-    Uses a button to navigate to the canvas page using React Router
+## Notes
 
-    Shows login and quick-start action buttons
-
-    Serves as the main navigation header across the app
-useIntersectionOberserver.js
-    Creates a custom React hook to trigger animations when elements come into view
-
-    Uses IntersectionObserver to detect when elements appear on the screen
-
-    Adds a CSS class (on) to elements when they become visible
-
-    Observes all child elements with classes like .reveal, .reveal-l, .reveal-r
-
-    Returns a ref that is attached to a parent container to enable this behavior      
-CanvasPage.jsx
-    Acts as a page-level component for the canvas route
-
-    Renders the main Canvas component
-
-    Serves as a wrapper between routing and the actual canvas UI
-
-    Used by React Router to display the canvas page when user navigates to /canvas
-
-    Keeps routing structure clean by separating pages from components    
-LandingPage.jsx
-    Renders the complete landing page by combining components like Nav, Hero, Feature sections, CTA, and Footer
-
-    Defines and passes feature data (bullets, icons, descriptions) to reusable FeatureSection components
-
-    Uses useEffect with IntersectionObserver to trigger scroll-based animations
-
-    Organizes the page into multiple sections like AI canvas, collaboration, and live tutor
-
-    Acts as the main entry screen before users navigate to the canvas    
-graphLayout.js
-    Takes raw graph data (nodes and edges) and calculates positions for each node on the canvas
-
-    Places the main (core) node at the center and arranges sub-nodes in a circular layout around it
-
-    Positions detail nodes around each sub-node in a spread-out pattern to avoid overlap
-
-    Handles edge cases by assigning positions to any unplaced nodes
-
-    Returns the final positioned graph data to be rendered on the canvas
-paintGraph.js
-    Takes positioned graph data and renders it onto the tldraw canvas using the editor
-
-    Draws connections (edges) between nodes using arrow shapes
-
-    Creates visual node shapes (rectangles) with styles based on their type (core, sub, detail)
-
-    Adjusts node size dynamically based on label length
-
-    Automatically zooms the canvas to fit the entire graph after rendering        
-App.jsx
-    Sets up routing for the entire React application using react-router-dom
-
-    Defines different pages (routes) like the landing page (/) and canvas page (/canvas)
-
-    Loads the LandingPage when user visits /
-
-    Loads the CanvasPage when user navigates to /canvas
-
-    Acts as the main entry point that controls which page is shown    
-main.jsx
-    Acts as the entry point of the React application where everything starts
-
-    Renders the main App component into the HTML root element
-
-    Initializes React’s rendering system using ReactDOM.createRoot()
-
-    Wraps the app in React.StrictMode for better debugging and error detection
-
-    Loads global styles like tldraw.css and index.css
+- The canvas is protected, so unauthenticated users are redirected to `/login`.
+- Gemini responses are expected to return structured JSON.
+- The backend URL is currently hard-coded in the auth pages, so keep it aligned with your local API while developing.
     
