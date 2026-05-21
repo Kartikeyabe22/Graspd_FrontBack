@@ -447,34 +447,21 @@ if elevenlabs_api_key:
 # -------------------- TTS FUNCTION --------------------
 def text_to_speech_stream(text: str):
     """Convert text to speech and return audio stream"""
-    # ElevenLabs (paid) - keep for quick switch back
-    # if not elevenlabs_client:
-    #     return None
-    #
-    # try:
-    #     audio = elevenlabs_client.text_to_speech.convert(
-    #         text=text,
-    #         voice_id="FE4QURxZUK1rVrVK3PlK",  # Your voice ID
-    #         model_id="eleven_v3",
-    #         output_format="mp3_44100_128",
-    #     )
-    #     return audio
-    # except Exception as e:
-    #     print(f"TTS Error: {e}")
-    #     return None
+    if not elevenlabs_client:
+        return None
 
-    # gTTS (free)
     try:
-        tts = gTTS(text=text, lang="en", slow=False)
-
-        buffer = BytesIO()
-        tts.write_to_fp(buffer)
+        audio_chunks = elevenlabs_client.text_to_speech.convert(
+            text=text,
+            voice_id="29I0RBZiDjbEuE3VC7s6",
+            model_id="eleven_multilingual_v2",
+            output_format="mp3_44100_128",
+        )
+        buffer = BytesIO(b"".join(audio_chunks))
         buffer.seek(0)
-
         return buffer
-
     except Exception as e:
-        print("TTS Error:", e)
+        print(f"TTS Error: {e}")
         return None
 
 # -------------------- EMBEDDINGS --------------------
